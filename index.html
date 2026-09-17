@@ -22,6 +22,7 @@
       --ok: #3ddc97;
       --warn: #e8b23a;
       --blue: #4a90d9;
+      --purple: #a78bfa;
       --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
       --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
     }
@@ -279,12 +280,25 @@
       border-radius: 2px;
       background: #0c0e13;
       white-space: nowrap;
+      transition: color .15s, border-color .15s;
     }
 
     .chip.pattern {
       color: var(--accent);
       border-color: rgba(255, 90, 60, .35);
       background: rgba(255, 90, 60, .06);
+    }
+
+    .stage[data-mode="funny"] .chip.mode {
+      color: var(--warn);
+      border-color: rgba(232, 178, 58, .45);
+      background: rgba(232, 178, 58, .07);
+    }
+
+    .stage[data-mode="morph"] .chip.mode {
+      color: var(--purple);
+      border-color: rgba(167, 139, 250, .4);
+      background: rgba(167, 139, 250, .06);
     }
 
     .seq {
@@ -535,18 +549,13 @@
       border-color: #3d4453;
     }
 
-    .mini.on {
-      color: var(--accent);
-      border-color: rgba(255, 90, 60, .4);
-    }
-
     .controls {
       padding-bottom: 6px;
     }
 
     .seg {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(3, 1fr);
       gap: 3px;
       margin: 12px 12px 4px;
       padding: 3px;
@@ -556,13 +565,13 @@
     }
 
     .seg button {
-      padding: 9px 2px;
+      padding: 9px 4px;
       background: transparent;
       border: 0;
       border-radius: 2px;
       color: var(--muted);
       font-family: var(--sans);
-      font-size: 9px;
+      font-size: 9.5px;
       letter-spacing: .08em;
       text-transform: uppercase;
       font-weight: 700;
@@ -583,6 +592,16 @@
 
     .seg button.on:hover {
       background: var(--accent-2);
+    }
+
+    .seg button[data-mode="funny"].on {
+      background: var(--warn);
+      color: #1a1406;
+    }
+
+    .seg button[data-mode="morph"].on {
+      background: var(--purple);
+      color: #160d2a;
     }
 
     .switch {
@@ -679,11 +698,17 @@
       background: rgba(255, 90, 60, .06);
     }
 
+    .cats.disabled {
+      opacity: .4;
+      pointer-events: none;
+    }
+
     .tabs {
       display: flex;
       gap: 0;
       padding: 0 8px;
       border-bottom: 1px solid var(--line);
+      align-items: center;
     }
 
     .tab {
@@ -983,7 +1008,7 @@
       }
 
       .seg {
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(2, 1fr);
       }
     }
   </style>
@@ -1016,11 +1041,11 @@
     </header>
 
     <main>
-      <section class="stage panel" id="stage" data-state="idle">
+      <section class="stage panel" id="stage" data-state="idle" data-mode="simple">
         <div class="stage-head">
           <span class="dot"></span>
           <span class="label">Live output</span>
-          <span class="chip" id="modeChip">Simple</span>
+          <span class="chip mode" id="modeChip">Simple</span>
           <span class="chip pattern" id="patternChip">—</span>
           <span class="seq" id="seq">#0000</span>
         </div>
@@ -1048,6 +1073,7 @@
           <span><kbd>O</kbd> open</span>
           <span><kbd>C</kbd> copy</span>
           <span><kbd>S</kbd> star</span>
+          <span><kbd>F</kbd> funny</span>
         </div>
       </section>
 
@@ -1055,11 +1081,12 @@
         <section class="panel controls">
           <div class="panel-head"><span class="label">Mode</span></div>
           <div class="seg" id="modeSeg">
-            <button data-mode="simple" class="on" title="Single real words, .com heavy">Simple</button>
-            <button data-mode="clean" title="Word combinations">Clean</button>
-            <button data-mode="morph" title="Misspellings & mutations">Morph</button>
-            <button data-mode="std" title="Subdomains + paths">Std</button>
-            <button data-mode="chaos" title="Everything, unhinged">Chaos</button>
+            <button data-mode="simple"  class="on" title="Single real words, .com heavy">Simple</button>
+            <button data-mode="funny"   title="Absurd, silly, and meme-adjacent">Funny ★</button>
+            <button data-mode="clean"   title="Word combinations">Clean</button>
+            <button data-mode="morph"   title="Misspellings & mutations">Morph</button>
+            <button data-mode="std"     title="Subdomains + paths">Std</button>
+            <button data-mode="chaos"   title="Everything, unhinged">Chaos</button>
           </div>
 
           <label class="switch">
@@ -1089,13 +1116,17 @@
             <span class="cat on" data-cat="adj">adjectives</span>
             <span class="cat on" data-cat="thing">things</span>
           </div>
+          <div
+            style="padding:0 14px 12px; font-family:var(--mono); font-size:9.5px; color:var(--faint); letter-spacing:.05em; line-height:1.5;">
+            Categories apply to Simple / Clean / Morph / Std / Chaos.<br>Funny mode uses its own absurd vocabulary.
+          </div>
         </section>
 
         <section class="panel history">
           <div class="tabs">
             <button class="tab on" id="tabLog" data-view="log">Log <span class="cnt" id="logCount">0</span></button>
             <button class="tab" id="tabStars" data-view="stars">Stars <span class="cnt" id="starCount">0</span></button>
-            <button class="mini" id="clearBtn" style="margin-left:auto; margin-top:6px; margin-right:8px;">Clear</button>
+            <button class="mini" id="clearBtn" style="margin-left:auto; margin-right:8px;">Clear</button>
           </div>
           <ul id="historyList"></ul>
           <div class="empty" id="historyEmpty">
@@ -1128,7 +1159,7 @@
   const chance = p => Math.random() < p;
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
   const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const shuffle = a => { for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+  const shuffle = a => { for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; };
 
   const ALNUM = 'abcdefghijklmnopqrstuvwxyz0123456789';
   function randStr(min, max){
@@ -1146,7 +1177,7 @@
   }
 
   /* ============================================================
-     1. WORD BANKS — much larger, categorised
+     1. WORD BANKS
      ============================================================ */
 
   const BANKS = {
@@ -1158,7 +1189,7 @@
       'pike pony pug quail rabbit ram rat raven rhino robin rooster seal shark sheep shrew skunk slug ' +
       'snail snake sparrow spider squid stag swan tiger toad trout tuna turkey turtle wasp weasel ' +
       'whale wolf worm wren yak zebra cricket beetle mantis gecko lemur tapir heron badger pelican ' +
-      'puffin walrus narwhal urchin coral dolphin orca koala wombat possum ferret weasel stoat'
+      'puffin walrus narwhal urchin coral dolphin orca koala wombat possum stoat'
     ).split(/\s+/).filter(Boolean),
 
     food: (
@@ -1172,7 +1203,7 @@
       'popcorn pork potato pretzel prune pudding pumpkin radish raisin ramen rice roll salad salami ' +
       'salsa sandwich sauce sausage scone sherbet soup soy spice spinach steak stew sugar sushi syrup ' +
       'taco tart tea toast tofu tomato tortilla truffle tuna turkey turnip vanilla waffle walnut ' +
-      'watermelon wheat wine yogurt brisket biscuit pudding custard soufflé parfait'
+      'watermelon wheat wine yogurt brisket biscuit soufflé parfait'
     ).split(/\s+/).filter(Boolean),
 
     nature: (
@@ -1181,7 +1212,7 @@
       'grove hail harbor hedge hill ice island jungle lake leaf light marsh meadow mist moon moss ' +
       'mountain mud ocean peak pebble pine pond pool rain rainbow reef ridge river rock root sand sea ' +
       'seed shade sky snow soil spring star stone storm stream sun surf swamp thunder tide tree valley ' +
-      'vine wave wind wood canyon geyser lagoon delta plateau tundra lagoon estuary summit crater ' +
+      'vine wave wind wood canyon geyser lagoon delta plateau tundra estuary summit crater ' +
       'aurora twilight eclipse horizon nebula comet meteor galaxy cosmos'
     ).split(/\s+/).filter(Boolean),
 
@@ -1237,38 +1268,97 @@
       'tunnel castle tower market shop store office factory machine engine wheel motor rocket planet ' +
       'comet galaxy island desert jungle valley canyon glacier volcano storm thunder lightning rainbow ' +
       'shadow mirror candle bottle cup plate knife fork spoon bowl basket box bag key lock bell clock ' +
-      'watch ring chain rope wire nail hammer brush paint ruler eraser chalk board brush ladder bucket ' +
+      'watch ring chain rope wire nail hammer brush paint ruler eraser chalk board ladder bucket ' +
       'shovel rake wheelbarrow suitcase backpack wallet purse hat scarf glove sock shoe boot coat ' +
       'shirt pants dress skirt jacket sweater hoodie pillow blanket mattress sheet quilt curtain rug ' +
       'carpet lamp bulb switch socket plug cable charger battery remote camera lens tripod guitar ' +
-      'piano violin drum flute trumpet harp saxophone violin trumpet compass map atlas globe magnet ' +
+      'piano violin drum flute trumpet harp saxophone compass map atlas globe magnet ' +
       'telescope microscope prism magnifier hourglass pendulum metronome abacus calculator slate ' +
-      'poster banner flag badge stamp coin token medal trophy ribbon ribbon crown mask cape wand ' +
-      'sword shield armor helmet saddle saddle lantern torch rope anchor paddle oar sail mast rudder ' +
-      'engine piston gear lever spring pulley magnet coil wire bolt screw nut washer pin clip band ' +
-      'tape glue string thread needle button zipper buckle clasp hinge latch bolt lock rivet'
+      'poster banner flag badge stamp coin token medal trophy ribbon crown mask cape wand ' +
+      'sword shield armor helmet saddle lantern torch anchor paddle oar sail mast rudder ' +
+      'piston gear lever spring pulley coil bolt screw nut washer pin clip band ' +
+      'tape glue string thread needle button zipper buckle clasp hinge latch rivet'
     ).split(/\s+/).filter(Boolean)
   };
 
   /* ============================================================
-     2. SHUFFLE BAGS — no repeats until every word has been used
+     2. FUNNY BANKS — the absurd/silly vocabulary
      ============================================================ */
 
-  const BAGS = {};              // category -> { items, idx, last }
-  for (const cat of Object.keys(BANKS)){
-    BAGS[cat] = { items: shuffle(BANKS[cat].slice()), idx: 0, last: '' };
+  const FUNNY_NOUNS = (
+    'poop fart burp booger sneeze hiccup yawn snooze potato pickle cheese bean muffin waffle nugget ' +
+    'blob glob splat squish bonk honk boop beep bloop sploot floop glorp banana cabbage onion garlic ' +
+    'turnip radish eggplant sloth goose pigeon raccoon opossum donkey alpaca llama cat dog hamster ' +
+    'gerbil parrot goldfish turtle chicken duck cow pig sheep goat frog toad snail slug worm bug bee ' +
+    'wasp fly gnat moth beetle cricket noodle burger taco pizza donut cake cookie candy jelly jam ' +
+    'butter toast bread milk egg soup stew chili salad sandwich hotdog fries chips crisps popcorn ' +
+    'pretzel olive pepper salt sugar honey syrup sauce ketchup mustard mayo relish guac salsa ' +
+    'meatball jellybean marshmallow bubblegum goblin wizard dragon unicorn zombie pirate ninja robot ' +
+    'alien ghost witch troll gnome yeti sock shoe boot hat scarf glove mitten earmuff pillow blanket ' +
+    'cushion teapot kettle spatula whisk ladle strainer grater peeler corkscrew chopstick fork spoon ' +
+    'spork bowl plate mug cup saucer teabag coaster napkin toothbrush toothpaste comb hairbrush mirror ' +
+    'soap sponge towel flannel robe slipper onesie pyjama hoodie jumper trouser short pant belt buckle ' +
+    'zipper button pocket collar cuff sleeve hoodie laces velcro plaster bandage crutch wheelchair'
+  ).split(/\s+/).filter(Boolean);
+
+  const FUNNY_ADJ = (
+    'chonky thicc stronk moist cursed blessed soggy crispy fluffy derpy goofy silly wobbly squishy ' +
+    'chunky sneaky sleepy hungry angry smol big fat stinky yeety zoomy gremlin feral funky wonky ' +
+    'lumpy grumpy dumpy bumpy frumpy clumpy snoozy dozy woozy hazy lazy crazy daft barmy bonkers ' +
+    'nutty crackers bananas loopy kooky batty dotty potty nutty whimsical ridiculous absurd'
+  ).split(/\s+/).filter(Boolean);
+
+  const FUNNY_PREFIX = (
+    'smol big very super mega ultra lil fat cursed blessed sad happy angry sleepy hungry feral ' +
+    'gremlin stinky sweaty moist soggy crispy chunky thicc stronk the mr dr sir lady lord king queen'
+  ).split(/\s+/).filter(Boolean);
+
+  const FUNNY_VERBS = (
+    'yeet boop bonk splat honk fart poop slap hug lick squish smoosh squeeze send chuck slurp chomp ' +
+    'munch nom crunch sneeze burp hiccup yawn snooze wobble jiggle wiggle bounce zoom dash sprint ' +
+    'trip flop plop drip splash sizzle fizz pop bang boom clang thud whoosh zap buzz hum yoink bonk ' +
+    'boink zoink sploot glorp blorp florp shlorp'
+  ).split(/\s+/).filter(Boolean);
+
+  const FUNNY_SUFFIX = (
+    'zilla saurus tron bot inator omatic opolis ify master man king lord wizard wrangler monster ' +
+    'hole pants socks soup cake burger sandwich nugget gang squad corp inc ltd co shop mart world ' +
+    'land topia ville burg town city station factory central hub zone oclock arama fest stock palooza'
+  ).split(/\s+/).filter(Boolean);
+
+  const MEME_WORDS = (
+    'yeet sus rizz sigma slay vibe mood bruh oof sheesh ohio ratio goat based cringe poggers ' +
+    'lol lmao rofl omg wtf gg ez yoink boop boink bonk splat zoink'
+  ).split(/\s+/).filter(Boolean);
+
+  /* ============================================================
+     3. SHUFFLE BAGS — no repeats until every item has been used
+     ============================================================ */
+
+  function makeBag(arr){
+    return { items: shuffle(arr.slice()), idx: 0, last: '' };
   }
 
-  function bagPick(cat){
-    const bag = BAGS[cat];
-    if (!bag) return 'thing';
+  const BAGS = {};
+  for (const cat of Object.keys(BANKS)) BAGS[cat] = makeBag(BANKS[cat]);
+
+  const FUNNY = {
+    noun:   makeBag(FUNNY_NOUNS),
+    adj:    makeBag(FUNNY_ADJ),
+    prefix: makeBag(FUNNY_PREFIX),
+    verb:   makeBag(FUNNY_VERBS),
+    suffix: makeBag(FUNNY_SUFFIX),
+    meme:   makeBag(MEME_WORDS)
+  };
+
+  function bagPull(bag){
+    if (!bag || !bag.items.length) return 'thing';
     if (bag.idx >= bag.items.length){
-      // refill & reshuffle, avoiding an immediate repeat of the previous word
       const last = bag.last;
       bag.items = shuffle(bag.items);
       if (bag.items.length > 1 && bag.items[0] === last){
         const j = rint(1, bag.items.length - 1);
-        [bag.items[0], bag.items[j]] = [bag.items[j], bag.items[0]];
+        const t = bag.items[0]; bag.items[0] = bag.items[j]; bag.items[j] = t;
       }
       bag.idx = 0;
     }
@@ -1281,115 +1371,95 @@
 
   function bagWord(){
     const cats = activeCats.length ? activeCats : Object.keys(BANKS);
-    return bagPick(pick(cats));
+    return bagPull(BAGS[pick(cats)]);
   }
   function bagOf(cat){
-    if (activeCats.length && activeCats.indexOf(cat) === -1){
-      // category filtered out — pull from any active bag instead
-      return bagWord();
-    }
-    return bagPick(cat);
+    if (activeCats.length && activeCats.indexOf(cat) === -1) return bagWord();
+    return bagPull(BAGS[cat]);
   }
 
+  function funnyNoun(){ return bagPull(FUNNY.noun); }
+  function funnyAdj(){ return bagPull(FUNNY.adj); }
+  function funnyPrefix(){ return bagPull(FUNNY.prefix); }
+  function funnyVerb(){ return bagPull(FUNNY.verb); }
+  function funnySuffix(){ return bagPull(FUNNY.suffix); }
+  function memeWord(){ return bagPull(FUNNY.meme); }
+
   /* ============================================================
-     3. MUTATION ENGINE — plausible-looking misspellings
+     4. MUTATION ENGINE
      ============================================================ */
 
   const VOWELS = 'aeiou';
-
   function mutate(w){
     if (!w || w.length < 3) return w + 'x';
     const r = Math.random();
-
-    if (r < 0.20){
-      // double a middle letter:  chick -> chhic
-      const i = rint(1, w.length - 2);
-      return w.slice(0, i) + w[i] + w.slice(i);
-    }
-    if (r < 0.36){
-      // drop a letter:  chick -> chik
-      const i = rint(1, w.length - 2);
-      return w.slice(0, i) + w.slice(i + 1);
-    }
-    if (r < 0.52){
-      // swap two adjacent:  chick -> chikc
-      const i = rint(0, w.length - 2);
-      return w.slice(0, i) + w[i + 1] + w[i] + w.slice(i + 2);
-    }
-    if (r < 0.66){
-      // append a common letter
-      return w + pick('aeiourstln'.split(''));
-    }
+    if (r < 0.20){ const i = rint(1, w.length - 2); return w.slice(0, i) + w[i] + w.slice(i); }
+    if (r < 0.36){ const i = rint(1, w.length - 2); return w.slice(0, i) + w.slice(i + 1); }
+    if (r < 0.52){ const i = rint(0, w.length - 2); return w.slice(0, i) + w[i+1] + w[i] + w.slice(i + 2); }
+    if (r < 0.66) return w + pick('aeiourstln'.split(''));
     if (r < 0.78){
-      // swap the last vowel
       const last = w[w.length - 1];
       if (VOWELS.indexOf(last) !== -1) return w.slice(0, -1) + pick(VOWELS.split(''));
       return w + pick(VOWELS.split(''));
     }
-    if (r < 0.88){
-      // double the final letter: chick -> chickk
-      return w + w[w.length - 1];
-    }
-    // insert a vowel near the front
+    if (r < 0.88) return w + w[w.length - 1];
     const i = rint(1, Math.min(2, w.length - 1));
     return w.slice(0, i) + pick(VOWELS.split('')) + w.slice(i);
   }
 
   /* ============================================================
-     4. TLD POOLS  (weighted via repeats, shuffled per session)
+     5. TLD POOLS
      ============================================================ */
 
-  const TLDS_SIMPLE = [
-    'com','com','com','com','com','com','com','com','com','com','com','com',
-    'org','org','org','org','org','net','net','net','net','net',
-    'io','io','io','co','co','co','app','app','dev','dev','xyz','xyz','me','me','tv','cc',
-    'gg','fm','so','sh','to','us','uk','de','ca','au','ai','info','biz','live','site',
-    'online','blog','shop','store','wiki','news','fun','space','world','life','today',
-    'rocks','guru','ninja','club','zone','one','page','link','click','top','work','website',
-    'press','host','studio','design','digital','media','group','team','codes','run','tools'
-  ];
-  const TLDS_CLEAN = [
-    'com','com','com','com','com','net','net','net','org','org','org','io','io','dev','app','co',
-    'xyz','info','site','online','store','blog','tech','live','fun','space','me','tv','cc',
-    'gg','to','fm','ai','sh','so','uk','de','fr','jp','ca','au','nl','se','no','it','es',
-    'br','in','us','eu','club','wiki','news','page','zone'
-  ];
-  const TLDS_STD = TLDS_CLEAN.concat([
-    'biz','pro','name','mobi','press','host','website','world','life','today','codes',
-    'systems','network','solutions','agency','media','digital','group','team','rocks','guru'
-  ]);
-  const TLDS_CHAOS = TLDS_STD.concat([
-    'wtf','ninja','lol','icu','quest','rest','bar','cafe','pizza','coffee','pink','black',
-    'blue','red','green','gold','silver','plus','best','cool','epic','monster','toast',
-    'waffle','noodle','pickle','dragon','penguin','goblin','party'
-  ]);
+  const TLDS_SIMPLE = (
+    'com com com com com com com com com com com com org org org org org net net net net net ' +
+    'io io io co co co app app dev dev xyz xyz me me tv cc gg fm so sh to us uk de ca au ai ' +
+    'info biz live site online blog shop store wiki news fun space world life today rocks guru ' +
+    'ninja club zone one page link click top work website press host studio design digital media ' +
+    'group team codes run tools'
+  ).split(/\s+/);
+
+  const TLDS_CLEAN = (
+    'com com com com com net net net org org org io io dev app co xyz info site online store blog ' +
+    'tech live fun space me tv cc gg to fm ai sh so uk de fr jp ca au nl se no it es br in us eu ' +
+    'club wiki news page zone'
+  ).split(/\s+/);
+
+  const TLDS_STD = TLDS_CLEAN.concat(
+    'biz pro name mobi press host website world life today codes systems network solutions ' +
+    'agency media digital group team rocks guru'.split(/\s+/)
+  );
+
+  const TLDS_CHAOS = TLDS_STD.concat(
+    'wtf ninja lol icu quest rest bar cafe pizza coffee pink black blue red green gold silver plus ' +
+    'best cool epic monster toast waffle noodle pickle dragon penguin goblin party'.split(/\s+/)
+  );
+
+  const TLDS_FUNNY = (
+    'com com com com com com com com net net net org lol lol wtf wtf fun fun cool cool rocks rocks ' +
+    'ninja ninja guru pizza coffee beer toast party monster epic yeet sus ohio gg sh rip fyi best ' +
+    'ninja wtf lol cool ninja sus yeet based cringe poggers'
+  ).split(/\s+/);
 
   const TLD_BAGS = {};
-  function tldBagFor(mode){
-    const arr = mode === 'simple' ? TLDS_SIMPLE
-              : mode === 'clean'  ? TLDS_CLEAN
-              : mode === 'morph'  ? TLDS_CLEAN
-              : mode === 'std'    ? TLDS_STD
-              : TLDS_CHAOS;
-    if (!TLD_BAGS[mode]) TLD_BAGS[mode] = { items: shuffle(arr.slice()), idx: 0, last: '' };
-    const bag = TLD_BAGS[mode];
-    if (bag.idx >= bag.items.length){
-      const last = bag.last;
-      bag.items = shuffle(bag.items);
-      if (bag.items.length > 1 && bag.items[0] === last){
-        const j = rint(1, bag.items.length - 1);
-        [bag.items[0], bag.items[j]] = [bag.items[j], bag.items[0]];
-      }
-      bag.idx = 0;
+  function tldFor(mode){
+    if (!TLD_BAGS[mode]){
+      const arr = mode === 'simple' ? TLDS_SIMPLE
+                : mode === 'funny'  ? TLDS_FUNNY
+                : mode === 'clean'  ? TLDS_CLEAN
+                : mode === 'morph'  ? TLDS_CLEAN
+                : mode === 'std'    ? TLDS_STD
+                : TLDS_CHAOS;
+      TLD_BAGS[mode] = makeBag(arr);
     }
-    const t = bag.items[bag.idx++];
-    bag.last = t;
-    return t;
+    return bagPull(TLD_BAGS[mode]);
   }
 
   /* ============================================================
-     5. SHAPES — the actual structure of each hostname
+     6. SHAPES
      ============================================================ */
+
+  const SUFFIXES_GEN = ['ly','ify','ish','er','ing','ster','ify','ion','oid','ism'];
 
   function shapeList(mode){
     const W = bagWord;
@@ -1397,7 +1467,6 @@
     const V = () => bagOf('verb');
     const N = () => rint(2, 99);
     const N3 = () => rint(100, 999);
-    const SUF = () => pick(['ly','ify','ish','er','ing','ster','ify','ion','oid','ism']);
 
     if (mode === 'simple'){
       return [
@@ -1407,6 +1476,27 @@
         { w: 2,  label: 'num',      fn: () => W() + N() }
       ];
     }
+
+    if (mode === 'funny'){
+      return [
+        { w: 14, label: 'silly-adj',  fn: () => funnyAdj() + funnyNoun() },
+        { w: 12, label: 'suffix',     fn: () => funnyNoun() + funnySuffix() },
+        { w: 11, label: 'verb+noun',  fn: () => funnyVerb() + funnyNoun() },
+        { w: 10, label: 'prefix',     fn: () => funnyPrefix() + funnyNoun() },
+        { w: 9,  label: 'compound',   fn: () => funnyNoun() + funnyNoun() },
+        { w: 8,  label: 'o-clock',    fn: () => funnyNoun() + 'oclock' },
+        { w: 7,  label: 'whereis',    fn: () => 'whereis' + funnyNoun() },
+        { w: 6,  label: 'howto',      fn: () => 'howto' + funnyVerb() },
+        { w: 6,  label: 'meme',       fn: () => memeWord() + funnyNoun() },
+        { w: 5,  label: 'the',        fn: () => 'the' + funnyAdj() + funnyNoun() },
+        { w: 4,  label: 'and',        fn: () => funnyNoun() + 'and' + funnyNoun() },
+        { w: 3,  label: 'cursed',     fn: () => 'cursed' + funnyNoun() },
+        { w: 3,  label: 'lord',       fn: () => funnyNoun() + 'lord' },
+        { w: 2,  label: 'face',       fn: () => funnyNoun() + 'face' },
+        { w: 2,  label: 'gang',       fn: () => funnyNoun() + 'gang' }
+      ];
+    }
+
     if (mode === 'clean'){
       return [
         { w: 24, label: 'single',   fn: () => W() },
@@ -1416,22 +1506,27 @@
         { w: 10, label: 'hyphen',   fn: () => W() + '-' + W() },
         { w: 8,  label: 'num',      fn: () => W() + N3() },
         { w: 6,  label: 'verb+ing', fn: () => V() + 'ing' },
-        { w: 4,  label: 'suffix',   fn: () => W() + SUF() }
+        { w: 4,  label: 'suffix',   fn: () => W() + pick(SUFFIXES_GEN) }
       ];
     }
+
     if (mode === 'morph'){
       return [
-        { w: 42, label: 'mutated',   fn: () => mutate(W()) },
-        { w: 22, label: 'mutated-n', fn: () => mutate(W()) + N() },
-        { w: 18, label: 'suffix',    fn: () => W() + SUF() },
-        { w: 12, label: 'double-mut',fn: () => mutate(mutate(W())) },
-        { w: 6,  label: 'mut-comp',  fn: () => mutate(W()) + W() }
+        { w: 42, label: 'mutated',    fn: () => mutate(W()) },
+        { w: 22, label: 'mutated-n',  fn: () => mutate(W()) + N() },
+        { w: 18, label: 'suffix',     fn: () => W() + pick(SUFFIXES_GEN) },
+        { w: 12, label: 'double-mut', fn: () => mutate(mutate(W())) },
+        { w: 6,  label: 'mut-comp',   fn: () => mutate(W()) + W() }
       ];
     }
+
+    const SUBS = (
+      'www blog shop api dev app my the get try old new web cdn static mail forum wiki news docs ' +
+      'beta test hub lab core edge node pixel byte void null echo flux orbit atlas prime rapid deep ' +
+      'soft blue red green black gold iron neon'
+    ).split(/\s+/);
+
     if (mode === 'std'){
-      const SUBS = ['www','blog','shop','api','dev','app','my','the','get','try','old','new','web',
-                    'hub','lab','core','node','byte','void','null','echo','flux','orbit','atlas',
-                    'north','prime','rapid','deep','base','root','main','sub'];
       return [
         { w: 30, label: 'sub+word',  fn: () => pick(SUBS) + '.' + W() },
         { w: 20, label: 'sub+comp',  fn: () => pick(SUBS) + '.' + W() + W() },
@@ -1442,11 +1537,8 @@
         { w: 4,  label: 'deep',      fn: () => pick(SUBS) + '.' + W() + '/' + pick(['v1','v2','api','docs']) }
       ];
     }
-    // chaos
-    const SUBS = ['www','blog','shop','api','dev','app','my','the','get','try','old','new','web',
-                  'cdn','static','mail','forum','wiki','news','docs','beta','test','hub','lab',
-                  'core','edge','node','pixel','byte','void','null','echo','flux','orbit','atlas',
-                  'prime','rapid','deep','soft','blue','red','green','black','gold','iron','neon'];
+
+    /* chaos */
     return [
       { w: 14, label: 'scramble',   fn: () => randStr(4, 12) },
       { w: 12, label: 'mutated',    fn: () => mutate(W()) },
@@ -1469,40 +1561,43 @@
     let total = 0;
     for (const s of list) total += s.w;
     let r = Math.random() * total;
-    for (const s of list){
-      r -= s.w;
-      if (r <= 0) return s;
-    }
+    for (const s of list){ r -= s.w; if (r <= 0) return s; }
     return list[0];
   }
 
   /* ============================================================
-     6. HOST + URL BUILDING
+     7. DECORATION + BUILD
      ============================================================ */
+
+  const SEGS = (
+    'about contact home index blog news shop store product products docs api v1 v2 v3 user ' +
+    'users profile settings login signup admin dashboard search results post posts article ' +
+    'articles page pages gallery media images files download downloads upload support help ' +
+    'faq terms privacy archive status health metrics config setup install guide manual ' +
+    'changelog release beta test demo'
+  ).split(/\s+/);
+
+  const QKEYS = (
+    'q s search id page p ref user token key v lang sort filter utm_source utm_campaign ' +
+    'debug mode type category tag session code redirect next callback format limit offset ' +
+    'view theme hl source from to'
+  ).split(/\s+/);
+
+  const QVALS = (
+    'true false 1 0 null undefined admin test demo hello yes no on off debug dark light en ' +
+    'en-US json xml html asc desc all none random full mini raw'
+  ).split(/\s+/);
+
+  const FRAGS = ['top','main','section-1','comments','ref','anchor','intro','details'];
 
   function decorate(mode){
     let pC, qC, fC;
     if (mode === 'simple'){        pC = 0.04; qC = 0.01; fC = 0.01; }
+    else if (mode === 'funny'){    pC = 0.08; qC = 0.02; fC = 0.02; }
     else if (mode === 'clean'){    pC = 0.10; qC = 0.02; fC = 0.02; }
     else if (mode === 'morph'){    pC = 0.08; qC = 0.02; fC = 0.02; }
     else if (mode === 'std'){      pC = 0.55; qC = 0.12; fC = 0.06; }
     else {                         pC = 0.60; qC = 0.28; fC = 0.18; }
-
-    const SEGS = ['about','contact','home','index','blog','news','shop','store','product',
-                  'products','docs','api','v1','v2','v3','user','users','profile','settings',
-                  'login','signup','admin','dashboard','search','results','post','posts','article',
-                  'articles','page','pages','gallery','media','images','files','download',
-                  'downloads','upload','support','help','faq','terms','privacy','archive',
-                  'status','health','metrics','config','setup','install','guide','manual',
-                  'changelog','release','beta','test','demo'];
-    const QKEYS = ['q','s','search','id','page','p','ref','user','token','key','v','lang','sort',
-                   'filter','utm_source','utm_campaign','debug','mode','type','category','tag',
-                   'session','code','redirect','next','callback','format','limit','offset','view',
-                   'theme','hl','source','from','to'];
-    const QVALS = ['true','false','1','0','null','undefined','admin','test','demo','hello','yes',
-                   'no','on','off','debug','dark','light','en','en-US','json','xml','html','asc',
-                   'desc','all','none','random','full','mini','raw'];
-    const FRAGS = ['top','main','section-1','comments','ref','anchor','intro','details'];
 
     let out = '';
     if (chance(pC)){
@@ -1536,12 +1631,12 @@
 
   function buildURL(mode){
     const shape = pickShape(mode);
-    const host = shape.fn() + '.' + tldBagFor(mode);
+    const host = shape.fn() + '.' + tldFor(mode);
     return { url: 'https://' + host + decorate(mode), label: shape.label, host: host };
   }
 
   /* ============================================================
-     7. DNS VERIFICATION
+     8. DNS VERIFICATION
      ============================================================ */
 
   let dnsAvailable = true;
@@ -1572,7 +1667,7 @@
   }
 
   /* ============================================================
-     8. STATE
+     9. STATE
      ============================================================ */
 
   const state = {
@@ -1591,7 +1686,7 @@
     bestStreak: 0,
     status: 'idle',
     scanHost: '',
-    current: null,        // { url, label, ok }
+    current: null
   };
 
   let inflight = 0;
@@ -1599,12 +1694,15 @@
   const POOL_TARGET = 6;
   const ATTEMPTS_TASK = 16;
 
+  /* Pool generation guard: bumped on every resetPool() so stale
+     inflight lookups can't push old-mode URLs into the new pool. */
+  let poolGen = 0;
+
   let busy = false;
   let animTimer = null;
   let toastTimer = null;
   let lastScanPaint = 0;
 
-  /* DOM */
   const stage = $('#stage');
   const urlDisplay = $('#urlDisplay');
   const seqEl = $('#seq');
@@ -1622,15 +1720,17 @@
   const starBtn = $('#starBtn');
   const logCount = $('#logCount');
   const starCount = $('#starCount');
+  const catsEl = $('#cats');
 
   /* ============================================================
-     9. STORAGE
+     10. STORAGE
      ============================================================ */
 
   function loadStars(){
     try {
       const raw = localStorage.getItem('sluice.stars');
-      return raw ? JSON.parse(raw) : [];
+      const arr = raw ? JSON.parse(raw) : [];
+      return Array.isArray(arr) ? arr : [];
     } catch (e){ return []; }
   }
   function saveStars(){
@@ -1639,7 +1739,7 @@
   function isStarred(url){ return state.stars.some(s => s.url === url); }
 
   /* ============================================================
-     10. RENDERING
+     11. RENDERING
      ============================================================ */
 
   function paintURL(url){
@@ -1721,19 +1821,13 @@
       star.className = 'hbtn star' + (isStarred(item.url) ? ' on' : '');
       star.textContent = isStarred(item.url) ? '★' : '☆';
       star.title = 'Star / unstar';
-      star.addEventListener('click', e => {
-        e.stopPropagation();
-        toggleStar(item);
-      });
+      star.addEventListener('click', e => { e.stopPropagation(); toggleStar(item); });
 
       const open = document.createElement('button');
       open.className = 'hbtn';
       open.textContent = '↗';
       open.title = 'Open';
-      open.addEventListener('click', e => {
-        e.stopPropagation();
-        openURL(item.url);
-      });
+      open.addEventListener('click', e => { e.stopPropagation(); openURL(item.url); });
 
       li.appendChild(badge);
       li.appendChild(span);
@@ -1746,7 +1840,7 @@
         clearInterval(animTimer);
         paintURL(item.url);
         patternChip.textContent = item.label || '—';
-        state.current = item;
+        state.current = { url: item.url, label: item.label || '—', ok: item.ok };
         state.status = item.ok ? 'verified' : 'raw';
         renderScan();
         renderStarBtn();
@@ -1765,7 +1859,7 @@
   }, 30000);
 
   /* ============================================================
-     11. POOL PUMP
+     12. POOL PUMP (generation-guarded)
      ============================================================ */
 
   function reportScan(host){
@@ -1777,9 +1871,10 @@
     }
   }
 
-  async function findOne(){
+  async function findOne(gen, mode){
     for (let attempt = 0; attempt < ATTEMPTS_TASK; attempt++){
-      const built = buildURL(state.mode);
+      if (gen !== poolGen) return false;       // pool was reset mid-flight
+      const built = buildURL(mode);
       const host = built.host;
       if (state.seenHosts.has(host)) continue;
       state.seenHosts.add(host);
@@ -1789,6 +1884,8 @@
       renderStats();
 
       const ok = await dnsLookup(host);
+      if (gen !== poolGen) return false;       // abort before committing
+
       if (ok === null){ dnsAvailable = false; return false; }
       if (ok){
         state.live++;
@@ -1802,18 +1899,21 @@
 
   function pump(){
     if (!state.verifiedOnly || !dnsAvailable) return;
+    const gen = poolGen;
+    const mode = state.mode;
     while (inflight < MAX_INFLIGHT && state.pool.length < POOL_TARGET){
       inflight++;
-      findOne().catch(()=>{}).then(() => {
+      findOne(gen, mode).catch(()=>{}).then(() => {
         inflight--;
         setTimeout(pump, 55);
       });
     }
   }
 
-  async function takeFromPool(timeoutMs){
+  async function takeFromPool(timeoutMs, gen){
     const t0 = performance.now();
     while (state.pool.length === 0){
+      if (gen !== poolGen) return null;
       if (!dnsAvailable) return null;
       if (performance.now() - t0 > timeoutMs) return null;
       pump();
@@ -1825,13 +1925,14 @@
   }
 
   function resetPool(){
+    poolGen++;
     state.pool.length = 0;
     state.seenHosts.clear();
     pump();
   }
 
   /* ============================================================
-     12. REVEAL ANIMATION
+     13. REVEAL ANIMATION
      ============================================================ */
 
   const SCRAMBLE = "abcdefghijklmnopqrstuvwxyz0123456789-._~:/?#[]@!$&'()*+,;=%";
@@ -1861,7 +1962,7 @@
   }
 
   /* ============================================================
-     13. SAFE OPEN  (fixes Safari COOP error)
+     14. SAFE OPEN (COOP fix)
      ============================================================ */
 
   function openURL(url){
@@ -1880,33 +1981,46 @@
   }
 
   /* ============================================================
-     14. ACTIONS
+     15. ACTIONS
      ============================================================ */
 
-  async function forge(opts){
-    opts = opts || {};
+  async function forge(){
     if (busy) return;
     busy = true;
     forgeBtn.disabled = true;
 
+    const gen = poolGen;
+    const mode = state.mode;
     let picked = null;
     let verified = false;
 
     if (state.verifiedOnly && dnsAvailable){
       state.status = 'searching';
       renderScan();
-      picked = await takeFromPool(9000);
+      picked = await takeFromPool(9000, gen);
+
+      // if the pool was reset (mode change) while we waited, bail politely
+      if (gen !== poolGen){
+        busy = false;
+        forgeBtn.disabled = false;
+        return;
+      }
+
       if (picked){
         verified = true;
         state.status = 'verified';
+      } else if (!dnsAvailable){
+        state.status = 'unverified';
+        const built = buildURL(mode);
+        picked = { url: built.url, label: built.label, host: built.host };
       } else {
         state.status = 'unverified';
-        const built = buildURL(state.mode);
+        const built = buildURL(mode);
         picked = { url: built.url, label: built.label, host: built.host };
       }
     } else {
       state.status = state.verifiedOnly ? 'unverified' : 'raw';
-      const built = buildURL(state.mode);
+      const built = buildURL(mode);
       picked = { url: built.url, label: built.label, host: built.host };
     }
 
@@ -1922,7 +2036,7 @@
     }
 
     seqEl.textContent = '#' + String(state.count).padStart(4, '0');
-    modeChip.textContent = cap(state.mode);
+    modeChip.textContent = cap(mode);
     patternChip.textContent = picked.label || '—';
     state.current = { url: picked.url, label: picked.label, ok: verified };
 
@@ -1975,7 +2089,12 @@
   function toggleStar(item){
     const idx = state.stars.findIndex(s => s.url === item.url);
     if (idx === -1){
-      state.stars.unshift({ url: item.url, ok: item.ok, ts: item.ts || Date.now(), label: item.label });
+      state.stars.unshift({
+        url: item.url,
+        ok: item.ok,
+        ts: item.ts || Date.now(),
+        label: item.label || '—'
+      });
       if (state.stars.length > 200) state.stars.pop();
       toast('Starred');
     } else {
@@ -1990,7 +2109,12 @@
 
   function starCurrent(){
     if (!state.current){ toast('Nothing to star yet'); return; }
-    toggleStar({ url: state.current.url, ok: state.current.ok, ts: Date.now(), label: state.current.label });
+    toggleStar({
+      url: state.current.url,
+      ok: state.current.ok,
+      ts: Date.now(),
+      label: state.current.label
+    });
   }
 
   function toast(msg){
@@ -2002,11 +2126,11 @@
   }
 
   /* ============================================================
-     15. EVENTS
+     16. EVENTS
      ============================================================ */
 
-  forgeBtn.addEventListener('click', () => forge());
-  $('#rerollBtn').addEventListener('click', () => forge({ reroll: true }));
+  forgeBtn.addEventListener('click', forge);
+  $('#rerollBtn').addEventListener('click', forge);
   $('#openBtn').addEventListener('click', openCurrent);
   $('#copyBtn').addEventListener('click', copyCurrent);
   starBtn.addEventListener('click', starCurrent);
@@ -2029,9 +2153,15 @@
 
   const modeButtons = Array.prototype.slice.call(document.querySelectorAll('#modeSeg button'));
   function setMode(next, silent){
+    if (state.mode === next) return;
     state.mode = next;
+    stage.dataset.mode = next;
     modeButtons.forEach(b => b.classList.toggle('on', b.dataset.mode === next));
     modeChip.textContent = cap(next);
+
+    // vocabulary chips don't affect funny mode
+    catsEl.classList.toggle('disabled', next === 'funny');
+
     resetPool();
     if (!silent) toast('Mode · ' + cap(next));
   }
@@ -2042,44 +2172,50 @@
   $('#verifiedOnly').addEventListener('change', e => {
     state.verifiedOnly = e.target.checked;
     if (state.verifiedOnly){ dnsAvailable = true; resetPool(); }
-    else state.pool.length = 0;
+    else { state.pool.length = 0; poolGen++; }
     state.status = 'idle';
     renderScan();
   });
+
   $('#autoOpen').addEventListener('change', e => {
     state.autoOpen = e.target.checked;
   });
 
   // category chips
   const catEls = Array.prototype.slice.call(document.querySelectorAll('.cat'));
+
+  function syncCatsUI(){
+    catEls.forEach(el => {
+      el.classList.toggle('on', activeCats.indexOf(el.dataset.cat) !== -1);
+    });
+  }
+
   catEls.forEach(el => {
     el.addEventListener('click', () => {
       const cat = el.dataset.cat;
       const idx = activeCats.indexOf(cat);
       if (idx === -1){
         activeCats.push(cat);
-        el.classList.add('on');
       } else if (activeCats.length > 1){
         activeCats.splice(idx, 1);
-        el.classList.remove('on');
       } else {
-        toast('At least one category needed');
+        toast('Keep at least one');
+        return;
       }
+      syncCatsUI();
       resetPool();
     });
   });
 
   $('#catsAll').addEventListener('click', () => {
-    const allOn = catEls.every(el => el.classList.contains('on'));
-    catEls.forEach(el => {
-      el.classList.toggle('on', !allOn);
-    });
+    const allOn = catEls.every(el => activeCats.indexOf(el.dataset.cat) !== -1);
     if (allOn){
-      activeCats = ['animal'];  // fall back to at least one
-      catEls[0].classList.add('on');
+      // collapse to just the first category
+      activeCats = [catEls[0].dataset.cat];
     } else {
       activeCats = catEls.map(el => el.dataset.cat);
     }
+    syncCatsUI();
     resetPool();
   });
 
@@ -2102,7 +2238,11 @@
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
       forge();
     } else if (e.key === 'r' || e.key === 'R'){
-      e.preventDefault(); forge({ reroll: true });
+      e.preventDefault(); forge();
+    } else if (e.key === 'f' || e.key === 'F'){
+      e.preventDefault();
+      setMode(state.mode === 'funny' ? 'simple' : 'funny');
+      forge();
     } else if (e.key === 'o' || e.key === 'O'){
       e.preventDefault(); openCurrent();
     } else if (e.key === 'c' || e.key === 'C'){
@@ -2113,15 +2253,16 @@
   });
 
   /* ============================================================
-     16. BOOT
+     17. BOOT
      ============================================================ */
 
+  stage.dataset.mode = state.mode;
   renderList();
   renderStats();
   renderScan();
   renderStarBtn();
   pump();
-  setTimeout(() => forge(), 220);
+  setTimeout(forge, 220);
 
 })();
   </script>
