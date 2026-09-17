@@ -23,6 +23,7 @@
       --warn: #e8b23a;
       --blue: #4a90d9;
       --purple: #a78bfa;
+      --red: #ff4444;
       --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
       --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
     }
@@ -301,6 +302,18 @@
       background: rgba(167, 139, 250, .06);
     }
 
+    .stage[data-mode="github"] .chip.mode {
+      color: #c4b5fd;
+      border-color: rgba(196, 181, 253, .45);
+      background: rgba(196, 181, 253, .07);
+    }
+
+    .stage[data-mode="youtube"] .chip.mode {
+      color: var(--red);
+      border-color: rgba(255, 68, 68, .45);
+      background: rgba(255, 68, 68, .07);
+    }
+
     .seq {
       margin-left: auto;
       font-family: var(--mono);
@@ -555,7 +568,7 @@
 
     .seg {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 3px;
       margin: 12px 12px 4px;
       padding: 3px;
@@ -565,14 +578,14 @@
     }
 
     .seg button {
-      padding: 9px 4px;
+      padding: 9px 2px;
       background: transparent;
       border: 0;
       border-radius: 2px;
       color: var(--muted);
       font-family: var(--sans);
-      font-size: 9.5px;
-      letter-spacing: .08em;
+      font-size: 9px;
+      letter-spacing: .06em;
       text-transform: uppercase;
       font-weight: 700;
       cursor: pointer;
@@ -602,6 +615,16 @@
     .seg button[data-mode="morph"].on {
       background: var(--purple);
       color: #160d2a;
+    }
+
+    .seg button[data-mode="github"].on {
+      background: #c4b5fd;
+      color: #0d0817;
+    }
+
+    .seg button[data-mode="youtube"].on {
+      background: var(--red);
+      color: #170505;
     }
 
     .switch {
@@ -667,7 +690,7 @@
       display: flex;
       flex-wrap: wrap;
       gap: 5px;
-      padding: 10px 14px 14px;
+      padding: 10px 14px 8px;
       border-top: 1px solid var(--line);
     }
 
@@ -699,8 +722,17 @@
     }
 
     .cats.disabled {
-      opacity: .4;
+      opacity: .35;
       pointer-events: none;
+    }
+
+    .cats-note {
+      padding: 0 14px 12px;
+      font-family: var(--mono);
+      font-size: 9.5px;
+      color: var(--faint);
+      letter-spacing: .05em;
+      line-height: 1.5;
     }
 
     .tabs {
@@ -1074,6 +1106,8 @@
           <span><kbd>C</kbd> copy</span>
           <span><kbd>S</kbd> star</span>
           <span><kbd>F</kbd> funny</span>
+          <span><kbd>G</kbd> github</span>
+          <span><kbd>Y</kbd> youtube</span>
         </div>
       </section>
 
@@ -1082,10 +1116,11 @@
           <div class="panel-head"><span class="label">Mode</span></div>
           <div class="seg" id="modeSeg">
             <button data-mode="simple"  class="on" title="Single real words, .com heavy">Simple</button>
-            <button data-mode="funny"   title="Absurd, silly, and meme-adjacent">Funny ★</button>
+            <button data-mode="funny"   title="Absurd, silly, and meme-adjacent">Funny</button>
             <button data-mode="clean"   title="Word combinations">Clean</button>
             <button data-mode="morph"   title="Misspellings & mutations">Morph</button>
-            <button data-mode="std"     title="Subdomains + paths">Std</button>
+            <button data-mode="github"  title="Random real GitHub repos via the GitHub API">GitHub</button>
+            <button data-mode="youtube" title="Random real YouTube videos via Piped">YouTube</button>
             <button data-mode="chaos"   title="Everything, unhinged">Chaos</button>
           </div>
 
@@ -1093,7 +1128,7 @@
           <input type="checkbox" id="verifiedOnly" checked />
           <span class="track"><span class="knob"></span></span>
           <span class="switch-label">Live verification
-            <small>Resolves each host via public DNS</small>
+            <small>DNS for domains · GitHub API for repos · Piped for videos</small>
           </span>
         </label>
 
@@ -1116,9 +1151,8 @@
             <span class="cat on" data-cat="adj">adjectives</span>
             <span class="cat on" data-cat="thing">things</span>
           </div>
-          <div
-            style="padding:0 14px 12px; font-family:var(--mono); font-size:9.5px; color:var(--faint); letter-spacing:.05em; line-height:1.5;">
-            Categories apply to Simple / Clean / Morph / Std / Chaos.<br>Funny mode uses its own absurd vocabulary.
+          <div class="cats-note" id="catsNote">
+            Feeds domain names and search queries. Funny mode uses its own vocabulary.
           </div>
         </section>
 
@@ -1138,7 +1172,7 @@
     </main>
 
     <footer>
-      <span>Domains are procedurally minted per request and resolved against public DNS. Nothing is pre-computed or stored.</span>
+      <span>Domains are procedurally minted per request. GitHub and YouTube modes pull real results from live public APIs.</span>
       <span class="right" id="footStat">0 dispatched</span>
     </footer>
   </div>
@@ -1161,6 +1195,11 @@
   const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const shuffle = a => { for (let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random()*(i+1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; };
 
+  const MODE_LABELS = {
+    simple: 'Simple', funny: 'Funny', clean: 'Clean', morph: 'Morph',
+    github: 'GitHub', youtube: 'YouTube', chaos: 'Chaos'
+  };
+
   const ALNUM = 'abcdefghijklmnopqrstuvwxyz0123456789';
   function randStr(min, max){
     const n = rint(min, max); let s = '';
@@ -1174,6 +1213,22 @@
     if (d < 3600000) return Math.floor(d/60000) + 'm';
     if (d < 86400000) return Math.floor(d/3600000) + 'h';
     return Math.floor(d/86400000) + 'd';
+  }
+  async function fetchJSON(url, timeoutMs, extraHeaders){
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs || 6000);
+    try {
+      const res = await fetch(url, {
+        signal: ctrl.signal,
+        cache: 'no-store',
+        headers: extraHeaders || {}
+      });
+      clearTimeout(timer);
+      return res;
+    } catch (e){
+      clearTimeout(timer);
+      throw e;
+    }
   }
 
   /* ============================================================
@@ -1203,7 +1258,7 @@
       'popcorn pork potato pretzel prune pudding pumpkin radish raisin ramen rice roll salad salami ' +
       'salsa sandwich sauce sausage scone sherbet soup soy spice spinach steak stew sugar sushi syrup ' +
       'taco tart tea toast tofu tomato tortilla truffle tuna turkey turnip vanilla waffle walnut ' +
-      'watermelon wheat wine yogurt brisket biscuit soufflé parfait'
+      'watermelon wheat wine yogurt brisket biscuit souffle parfait'
     ).split(/\s+/).filter(Boolean),
 
     nature: (
@@ -1282,7 +1337,7 @@
   };
 
   /* ============================================================
-     2. FUNNY BANKS — the absurd/silly vocabulary
+     2. FUNNY BANKS
      ============================================================ */
 
   const FUNNY_NOUNS = (
@@ -1305,7 +1360,7 @@
     'chonky thicc stronk moist cursed blessed soggy crispy fluffy derpy goofy silly wobbly squishy ' +
     'chunky sneaky sleepy hungry angry smol big fat stinky yeety zoomy gremlin feral funky wonky ' +
     'lumpy grumpy dumpy bumpy frumpy clumpy snoozy dozy woozy hazy lazy crazy daft barmy bonkers ' +
-    'nutty crackers bananas loopy kooky batty dotty potty nutty whimsical ridiculous absurd'
+    'nutty crackers bananas loopy kooky batty dotty potty whimsical ridiculous absurd'
   ).split(/\s+/).filter(Boolean);
 
   const FUNNY_PREFIX = (
@@ -1332,7 +1387,7 @@
   ).split(/\s+/).filter(Boolean);
 
   /* ============================================================
-     3. SHUFFLE BAGS — no repeats until every item has been used
+     3. SHUFFLE BAGS
      ============================================================ */
 
   function makeBag(arr){
@@ -1408,7 +1463,7 @@
   }
 
   /* ============================================================
-     5. TLD POOLS
+     5. TLD POOLS (domain modes only)
      ============================================================ */
 
   const TLDS_SIMPLE = (
@@ -1425,20 +1480,17 @@
     'club wiki news page zone'
   ).split(/\s+/);
 
-  const TLDS_STD = TLDS_CLEAN.concat(
+  const TLDS_CHAOS = TLDS_CLEAN.concat(
     'biz pro name mobi press host website world life today codes systems network solutions ' +
-    'agency media digital group team rocks guru'.split(/\s+/)
-  );
-
-  const TLDS_CHAOS = TLDS_STD.concat(
-    'wtf ninja lol icu quest rest bar cafe pizza coffee pink black blue red green gold silver plus ' +
-    'best cool epic monster toast waffle noodle pickle dragon penguin goblin party'.split(/\s+/)
+    'agency media digital group team rocks guru wtf ninja lol icu quest rest bar cafe pizza coffee ' +
+    'pink black blue red green gold silver plus best cool epic monster toast waffle noodle pickle ' +
+    'dragon penguin goblin party'.split(/\s+/)
   );
 
   const TLDS_FUNNY = (
     'com com com com com com com com net net net org lol lol wtf wtf fun fun cool cool rocks rocks ' +
     'ninja ninja guru pizza coffee beer toast party monster epic yeet sus ohio gg sh rip fyi best ' +
-    'ninja wtf lol cool ninja sus yeet based cringe poggers'
+    'cool sus yeet based cringe poggers'
   ).split(/\s+/);
 
   const TLD_BAGS = {};
@@ -1448,7 +1500,6 @@
                 : mode === 'funny'  ? TLDS_FUNNY
                 : mode === 'clean'  ? TLDS_CLEAN
                 : mode === 'morph'  ? TLDS_CLEAN
-                : mode === 'std'    ? TLDS_STD
                 : TLDS_CHAOS;
       TLD_BAGS[mode] = makeBag(arr);
     }
@@ -1456,10 +1507,15 @@
   }
 
   /* ============================================================
-     6. SHAPES
+     6. DOMAIN SHAPES
      ============================================================ */
 
   const SUFFIXES_GEN = ['ly','ify','ish','er','ing','ster','ify','ion','oid','ism'];
+  const SUBS = (
+    'www blog shop api dev app my the get try old new web cdn static mail forum wiki news docs ' +
+    'beta test hub lab core edge node pixel byte void null echo flux orbit atlas prime rapid deep ' +
+    'soft blue red green black gold iron neon'
+  ).split(/\s+/);
 
   function shapeList(mode){
     const W = bagWord;
@@ -1520,24 +1576,6 @@
       ];
     }
 
-    const SUBS = (
-      'www blog shop api dev app my the get try old new web cdn static mail forum wiki news docs ' +
-      'beta test hub lab core edge node pixel byte void null echo flux orbit atlas prime rapid deep ' +
-      'soft blue red green black gold iron neon'
-    ).split(/\s+/);
-
-    if (mode === 'std'){
-      return [
-        { w: 30, label: 'sub+word',  fn: () => pick(SUBS) + '.' + W() },
-        { w: 20, label: 'sub+comp',  fn: () => pick(SUBS) + '.' + W() + W() },
-        { w: 16, label: 'word+path', fn: () => W() + '/' + pick(['about','contact','info','blog','shop','home','docs','news']) },
-        { w: 12, label: 'www+word',  fn: () => 'www.' + W() },
-        { w: 10, label: 'adj+noun',  fn: () => A() + W() },
-        { w: 8,  label: 'num+word',  fn: () => N3() + W() },
-        { w: 4,  label: 'deep',      fn: () => pick(SUBS) + '.' + W() + '/' + pick(['v1','v2','api','docs']) }
-      ];
-    }
-
     /* chaos */
     return [
       { w: 14, label: 'scramble',   fn: () => randStr(4, 12) },
@@ -1566,7 +1604,7 @@
   }
 
   /* ============================================================
-     7. DECORATION + BUILD
+     7. DECORATION + DOMAIN BUILD
      ============================================================ */
 
   const SEGS = (
@@ -1596,7 +1634,6 @@
     else if (mode === 'funny'){    pC = 0.08; qC = 0.02; fC = 0.02; }
     else if (mode === 'clean'){    pC = 0.10; qC = 0.02; fC = 0.02; }
     else if (mode === 'morph'){    pC = 0.08; qC = 0.02; fC = 0.02; }
-    else if (mode === 'std'){      pC = 0.55; qC = 0.12; fC = 0.06; }
     else {                         pC = 0.60; qC = 0.28; fC = 0.18; }
 
     let out = '';
@@ -1629,14 +1666,177 @@
     return out;
   }
 
-  function buildURL(mode){
+  function buildDomainURL(mode){
     const shape = pickShape(mode);
     const host = shape.fn() + '.' + tldFor(mode);
-    return { url: 'https://' + host + decorate(mode), label: shape.label, host: host };
+    return { url: 'https://' + host + decorate(mode), label: shape.label, host: host, ok: false };
   }
 
   /* ============================================================
-     8. DNS VERIFICATION
+     8. GITHUB MODE
+     ------------------------------------------------------------
+     Pulls real repos from GitHub's public Search API (unauthenticated,
+     10 requests/min). One search yields up to 30 repos, so we cache
+     results and drain them across many forges. Falls back to plausible
+     guesses if the API is rate-limited or offline.
+     ============================================================ */
+
+  const GH_TOPICS_FALLBACK = ['awesome', 'cli', 'web', 'game', 'bot', 'api', 'tools', 'notes', 'demo', 'app'];
+
+  function ghQuery(){
+    const r = Math.random();
+    if (r < 0.55) return bagWord();
+    if (r < 0.70) return bagWord() + ' ' + bagWord();
+    if (r < 0.80) return 'language:' + pick(['javascript','python','rust','go','typescript','java','c++','ruby','php','swift','kotlin','c']);
+    if (r < 0.92) return pick(GH_TOPICS_FALLBACK);
+    return bagWord() + ' in:name';
+  }
+
+  function ghLabel(repo){
+    if (repo.language && repo.stargazers_count >= 1000){
+      return repo.language.toLowerCase() + ' ★' + Math.round(repo.stargazers_count / 1000) + 'k';
+    }
+    if (repo.language) return repo.language.toLowerCase() + ' repo';
+    return 'github repo';
+  }
+
+  let ghQueue = [];
+  let ghFetching = null;
+
+  async function ghFetch(){
+    try {
+      const q = ghQuery();
+      const sort = pick(['stars','forks','updated']);
+      const page = rint(1, 8);
+      const url = 'https://api.github.com/search/repositories?q=' +
+                  encodeURIComponent(q) +
+                  '&sort=' + sort +
+                  '&order=desc&per_page=30&page=' + page;
+      const res = await fetchJSON(url, 6500, { 'Accept': 'application/vnd.github+json' });
+      if (!res.ok) return;
+      const data = await res.json();
+      const items = (data.items || []).filter(i => i.html_url && !i.fork && !i.archived);
+      if (!items.length) return;
+      shuffle(items);
+      for (const it of items) ghQueue.push(it);
+    } catch (e){ /* offline / aborted / rate-limited */ }
+  }
+
+  async function findGitHub(gen){
+    for (let attempt = 0; attempt < 6; attempt++){
+      if (gen !== poolGen) return null;
+      if (ghQueue.length){
+        const repo = ghQueue.shift();
+        return { url: repo.html_url, label: ghLabel(repo), host: 'github.com', ok: true };
+      }
+      if (ghFetching){
+        await ghFetching;
+        continue;
+      }
+      ghFetching = ghFetch().finally(() => { ghFetching = null; });
+      await ghFetching;
+    }
+    return null;
+  }
+
+  function ghGuess(){
+    const user = bagWord() + (chance(0.35) ? randStr(2, 5) : '');
+    const repo = bagWord() + (chance(0.5) ? '-' + bagWord() : '') + (chance(0.25) ? randStr(1, 4) : '');
+    return {
+      url: 'https://github.com/' + user + '/' + repo,
+      label: 'github guess',
+      host: 'github.com',
+      ok: false
+    };
+  }
+
+  /* ============================================================
+     9. YOUTUBE MODE
+     ------------------------------------------------------------
+     Uses public Piped API instances (CORS-enabled) to pull real
+     random videos. Falls back to search-query URLs which always work.
+     ============================================================ */
+
+  const PIPED_INSTANCES = [
+    'https://pipedapi.kavin.rocks',
+    'https://pipedapi.adminforge.de',
+    'https://api.piped.yt',
+    'https://pipedapi.drgns.space',
+    'https://pipedapi.reallyaweso.me'
+  ];
+
+  function ytQuery(){
+    const r = Math.random();
+    if (r < 0.20) return bagWord();
+    if (r < 0.38) return bagWord() + ' ' + bagWord();
+    if (r < 0.52) return funnyAdj() + ' ' + bagWord();
+    if (r < 0.64) return 'how to ' + bagWord();
+    if (r < 0.74) return bagWord() + ' vs ' + bagWord();
+    if (r < 0.83) return bagWord() + ' ' + rint(1980, 2025);
+    if (r < 0.90) return memeWord() + ' ' + bagWord();
+    if (r < 0.96) return randStr(3, 8);
+    return funnyVerb() + 'ing ' + funnyNoun();
+  }
+
+  let ytQueue = [];
+  let ytFetching = null;
+
+  async function ytFetch(){
+    const q = ytQuery();
+    for (const inst of PIPED_INSTANCES){
+      try {
+        const url = inst + '/search?q=' + encodeURIComponent(q) + '&filter=videos';
+        const res = await fetchJSON(url, 4500);
+        if (!res.ok) continue;
+        const data = await res.json();
+        const items = (data.items || []).filter(i =>
+          i && i.url && typeof i.url === 'string' && i.url.indexOf('/watch?v=') === 0
+        );
+        if (!items.length) continue;
+        shuffle(items);
+        for (const it of items) ytQueue.push(it);
+        return;
+      } catch (e){ /* try next instance */ }
+    }
+    /* all instances failed — leave queue empty; caller falls back */
+  }
+
+  async function findYouTube(gen){
+    for (let attempt = 0; attempt < 4; attempt++){
+      if (gen !== poolGen) return null;
+      if (ytQueue.length){
+        const v = ytQueue.shift();
+        const vid = v.url.replace('/watch?v=', '').split('&')[0];
+        return {
+          url: 'https://www.youtube.com/watch?v=' + vid,
+          label: 'yt video',
+          host: 'youtube.com',
+          ok: true
+        };
+      }
+      if (ytFetching){
+        await ytFetching;
+        continue;
+      }
+      ytFetching = ytFetch().finally(() => { ytFetching = null; });
+      await ytFetching;
+    }
+    return null;
+  }
+
+  function ytFallback(){
+    /* search URLs always resolve to a real YouTube results page */
+    const q = ytQuery();
+    return {
+      url: 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q),
+      label: 'yt search',
+      host: 'youtube.com',
+      ok: true
+    };
+  }
+
+  /* ============================================================
+     10. DNS VERIFICATION (domain modes only)
      ============================================================ */
 
   let dnsAvailable = true;
@@ -1649,11 +1849,8 @@
     ];
     let sawResp = false;
     for (const ep of eps){
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 5000);
       try {
-        const res = await fetch(ep.url, { signal: ctrl.signal, cache: 'no-store', headers: ep.headers });
-        clearTimeout(timer);
+        const res = await fetchJSON(ep.url, 5000, ep.headers);
         sawResp = true;
         if (!res.ok) continue;
         const data = await res.json();
@@ -1661,13 +1858,13 @@
         const answers = data.Answer || data.answer || [];
         if (status === 0) return answers.some(a => a.type === 1 || a.type === 28);
         return false;
-      } catch (e){ clearTimeout(timer); }
+      } catch (e){ /* try next resolver */ }
     }
     return sawResp ? false : null;
   }
 
   /* ============================================================
-     9. STATE
+     11. STATE
      ============================================================ */
 
   const state = {
@@ -1683,19 +1880,16 @@
     live: 0,
     checked: 0,
     streak: 0,
-    bestStreak: 0,
     status: 'idle',
     scanHost: '',
     current: null
   };
 
   let inflight = 0;
-  const MAX_INFLIGHT = 4;
-  const POOL_TARGET = 6;
-  const ATTEMPTS_TASK = 16;
+  const MAX_INFLIGHT = 3;
+  const POOL_TARGET = 4;
+  const ATTEMPTS_TASK = 14;
 
-  /* Pool generation guard: bumped on every resetPool() so stale
-     inflight lookups can't push old-mode URLs into the new pool. */
   let poolGen = 0;
 
   let busy = false;
@@ -1721,9 +1915,10 @@
   const logCount = $('#logCount');
   const starCount = $('#starCount');
   const catsEl = $('#cats');
+  const catsNote = $('#catsNote');
 
   /* ============================================================
-     10. STORAGE
+     12. STORAGE
      ============================================================ */
 
   function loadStars(){
@@ -1739,7 +1934,7 @@
   function isStarred(url){ return state.stars.some(s => s.url === url); }
 
   /* ============================================================
-     11. RENDERING
+     13. RENDERING
      ============================================================ */
 
   function paintURL(url){
@@ -1757,10 +1952,10 @@
       scanText.innerHTML = 'resolving <b>' + esc(state.scanHost || '…') + '</b>';
       scanRight.textContent = state.checked + ' probed · ' + state.live + ' live';
     } else if (state.status === 'verified'){
-      scanText.innerHTML = '<b>dns ok</b> · host verified';
+      scanText.innerHTML = '<b>verified</b> · link confirmed';
       scanRight.textContent = state.checked + ' probed · ' + state.live + ' live';
     } else if (state.status === 'unverified'){
-      scanText.innerHTML = '<b>unverified</b> · dns check unavailable';
+      scanText.innerHTML = '<b>unverified</b> · could not confirm';
       scanRight.textContent = state.checked + ' probed';
     } else if (state.status === 'raw'){
       scanText.innerHTML = '<b>raw</b> · verification off';
@@ -1859,7 +2054,7 @@
   }, 30000);
 
   /* ============================================================
-     12. POOL PUMP (generation-guarded)
+     14. POOL PUMP
      ============================================================ */
 
   function reportScan(host){
@@ -1872,9 +2067,14 @@
   }
 
   async function findOne(gen, mode){
+    if (mode === 'github')  return await findGitHub(gen);
+    if (mode === 'youtube') return await findYouTube(gen);
+
+    /* domain modes */
+    if (!dnsAvailable) return null;
     for (let attempt = 0; attempt < ATTEMPTS_TASK; attempt++){
-      if (gen !== poolGen) return false;       // pool was reset mid-flight
-      const built = buildURL(mode);
+      if (gen !== poolGen) return null;
+      const built = buildDomainURL(mode);
       const host = built.host;
       if (state.seenHosts.has(host)) continue;
       state.seenHosts.add(host);
@@ -1884,29 +2084,33 @@
       renderStats();
 
       const ok = await dnsLookup(host);
-      if (gen !== poolGen) return false;       // abort before committing
-
-      if (ok === null){ dnsAvailable = false; return false; }
+      if (gen !== poolGen) return null;
+      if (ok === null){ dnsAvailable = false; return null; }
       if (ok){
         state.live++;
-        state.pool.push({ url: built.url, label: built.label, host: host });
         renderStats();
-        return true;
+        return { url: built.url, label: built.label, host: host, ok: true };
       }
     }
-    return false;
+    return null;
   }
 
   function pump(){
-    if (!state.verifiedOnly || !dnsAvailable) return;
+    if (!state.verifiedOnly) return;
+    const isAPIMode = state.mode === 'github' || state.mode === 'youtube';
+    if (!isAPIMode && !dnsAvailable) return;
+
     const gen = poolGen;
     const mode = state.mode;
     while (inflight < MAX_INFLIGHT && state.pool.length < POOL_TARGET){
       inflight++;
-      findOne(gen, mode).catch(()=>{}).then(() => {
+      findOne(gen, mode).then(item => {
         inflight--;
+        if (item && gen === poolGen && item.ok){
+          state.pool.push(item);
+        }
         setTimeout(pump, 55);
-      });
+      }).catch(() => { inflight--; setTimeout(pump, 55); });
     }
   }
 
@@ -1914,7 +2118,6 @@
     const t0 = performance.now();
     while (state.pool.length === 0){
       if (gen !== poolGen) return null;
-      if (!dnsAvailable) return null;
       if (performance.now() - t0 > timeoutMs) return null;
       pump();
       await sleep(80);
@@ -1928,11 +2131,13 @@
     poolGen++;
     state.pool.length = 0;
     state.seenHosts.clear();
+    ghQueue.length = 0;
+    ytQueue.length = 0;
     pump();
   }
 
   /* ============================================================
-     13. REVEAL ANIMATION
+     15. REVEAL ANIMATION
      ============================================================ */
 
   const SCRAMBLE = "abcdefghijklmnopqrstuvwxyz0123456789-._~:/?#[]@!$&'()*+,;=%";
@@ -1962,7 +2167,7 @@
   }
 
   /* ============================================================
-     14. SAFE OPEN (COOP fix)
+     16. SAFE OPEN
      ============================================================ */
 
   function openURL(url){
@@ -1981,8 +2186,14 @@
   }
 
   /* ============================================================
-     15. ACTIONS
+     17. ACTIONS
      ============================================================ */
+
+  function randomForMode(mode){
+    if (mode === 'github')  return ghGuess();
+    if (mode === 'youtube') return ytFallback();
+    return buildDomainURL(mode);
+  }
 
   async function forge(){
     if (busy) return;
@@ -1994,34 +2205,28 @@
     let picked = null;
     let verified = false;
 
-    if (state.verifiedOnly && dnsAvailable){
+    const isAPIMode = mode === 'github' || mode === 'youtube';
+    const canUsePool = state.verifiedOnly && (isAPIMode || dnsAvailable);
+
+    if (canUsePool){
       state.status = 'searching';
       renderScan();
-      picked = await takeFromPool(9000, gen);
+      picked = await takeFromPool(isAPIMode ? 12000 : 9000, gen);
 
-      // if the pool was reset (mode change) while we waited, bail politely
-      if (gen !== poolGen){
-        busy = false;
-        forgeBtn.disabled = false;
-        return;
-      }
+      if (gen !== poolGen){ busy = false; forgeBtn.disabled = false; return; }
 
       if (picked){
-        verified = true;
-        state.status = 'verified';
-      } else if (!dnsAvailable){
-        state.status = 'unverified';
-        const built = buildURL(mode);
-        picked = { url: built.url, label: built.label, host: built.host };
+        verified = picked.ok;
+        state.status = verified ? 'verified' : 'unverified';
       } else {
+        picked = randomForMode(mode);
+        verified = false;
         state.status = 'unverified';
-        const built = buildURL(mode);
-        picked = { url: built.url, label: built.label, host: built.host };
       }
     } else {
+      picked = randomForMode(mode);
+      verified = false;
       state.status = state.verifiedOnly ? 'unverified' : 'raw';
-      const built = buildURL(mode);
-      picked = { url: built.url, label: built.label, host: built.host };
     }
 
     renderScan();
@@ -2030,13 +2235,12 @@
     if (verified){
       state.live++;
       state.streak++;
-      if (state.streak > state.bestStreak) state.bestStreak = state.streak;
     } else {
       state.streak = 0;
     }
 
     seqEl.textContent = '#' + String(state.count).padStart(4, '0');
-    modeChip.textContent = cap(mode);
+    modeChip.textContent = MODE_LABELS[mode] || cap(mode);
     patternChip.textContent = picked.label || '—';
     state.current = { url: picked.url, label: picked.label, ok: verified };
 
@@ -2090,10 +2294,7 @@
     const idx = state.stars.findIndex(s => s.url === item.url);
     if (idx === -1){
       state.stars.unshift({
-        url: item.url,
-        ok: item.ok,
-        ts: item.ts || Date.now(),
-        label: item.label || '—'
+        url: item.url, ok: item.ok, ts: item.ts || Date.now(), label: item.label || '—'
       });
       if (state.stars.length > 200) state.stars.pop();
       toast('Starred');
@@ -2126,7 +2327,7 @@
   }
 
   /* ============================================================
-     16. EVENTS
+     18. EVENTS
      ============================================================ */
 
   forgeBtn.addEventListener('click', forge);
@@ -2152,19 +2353,24 @@
   });
 
   const modeButtons = Array.prototype.slice.call(document.querySelectorAll('#modeSeg button'));
+
   function setMode(next, silent){
     if (state.mode === next) return;
     state.mode = next;
     stage.dataset.mode = next;
     modeButtons.forEach(b => b.classList.toggle('on', b.dataset.mode === next));
-    modeChip.textContent = cap(next);
+    modeChip.textContent = MODE_LABELS[next] || cap(next);
 
-    // vocabulary chips don't affect funny mode
-    catsEl.classList.toggle('disabled', next === 'funny');
+    const disableCats = next === 'funny';
+    catsEl.classList.toggle('disabled', disableCats);
+    catsNote.textContent = disableCats
+      ? 'Funny mode has its own vocabulary.'
+      : 'Feeds domain names and search queries.';
 
     resetPool();
-    if (!silent) toast('Mode · ' + cap(next));
+    if (!silent) toast('Mode · ' + (MODE_LABELS[next] || cap(next)));
   }
+
   modeButtons.forEach(btn => {
     btn.addEventListener('click', () => setMode(btn.dataset.mode));
   });
@@ -2181,27 +2387,19 @@
     state.autoOpen = e.target.checked;
   });
 
-  // category chips
   const catEls = Array.prototype.slice.call(document.querySelectorAll('.cat'));
 
   function syncCatsUI(){
-    catEls.forEach(el => {
-      el.classList.toggle('on', activeCats.indexOf(el.dataset.cat) !== -1);
-    });
+    catEls.forEach(el => el.classList.toggle('on', activeCats.indexOf(el.dataset.cat) !== -1));
   }
 
   catEls.forEach(el => {
     el.addEventListener('click', () => {
       const cat = el.dataset.cat;
       const idx = activeCats.indexOf(cat);
-      if (idx === -1){
-        activeCats.push(cat);
-      } else if (activeCats.length > 1){
-        activeCats.splice(idx, 1);
-      } else {
-        toast('Keep at least one');
-        return;
-      }
+      if (idx === -1) activeCats.push(cat);
+      else if (activeCats.length > 1) activeCats.splice(idx, 1);
+      else { toast('Keep at least one'); return; }
       syncCatsUI();
       resetPool();
     });
@@ -2209,17 +2407,13 @@
 
   $('#catsAll').addEventListener('click', () => {
     const allOn = catEls.every(el => activeCats.indexOf(el.dataset.cat) !== -1);
-    if (allOn){
-      // collapse to just the first category
-      activeCats = [catEls[0].dataset.cat];
-    } else {
-      activeCats = catEls.map(el => el.dataset.cat);
-    }
+    activeCats = allOn
+      ? [catEls[0].dataset.cat]
+      : catEls.map(el => el.dataset.cat);
     syncCatsUI();
     resetPool();
   });
 
-  // tabs
   document.querySelectorAll('.tab').forEach(t => {
     t.addEventListener('click', () => {
       document.querySelectorAll('.tab').forEach(x => x.classList.remove('on'));
@@ -2243,6 +2437,14 @@
       e.preventDefault();
       setMode(state.mode === 'funny' ? 'simple' : 'funny');
       forge();
+    } else if (e.key === 'g' || e.key === 'G'){
+      e.preventDefault();
+      setMode(state.mode === 'github' ? 'simple' : 'github');
+      forge();
+    } else if (e.key === 'y' || e.key === 'Y'){
+      e.preventDefault();
+      setMode(state.mode === 'youtube' ? 'simple' : 'youtube');
+      forge();
     } else if (e.key === 'o' || e.key === 'O'){
       e.preventDefault(); openCurrent();
     } else if (e.key === 'c' || e.key === 'C'){
@@ -2253,7 +2455,7 @@
   });
 
   /* ============================================================
-     17. BOOT
+     19. BOOT
      ============================================================ */
 
   stage.dataset.mode = state.mode;
