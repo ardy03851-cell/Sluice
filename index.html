@@ -4,426 +4,954 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Spaceship Flight Sim</title>
+  <title>Spaceship Flight Sim · Advanced HUD</title>
   <style>
-    body,
-    html {
+    html,
+    body {
       margin: 0;
-      padding: 0;
       width: 100%;
       height: 100%;
       overflow: hidden;
-      background-color: #000;
+      background: #01040a;
       touch-action: none;
-      user-select: none;
+      user-select: none
     }
 
     #game-container {
       position: relative;
       width: 100%;
       height: 100%;
+      overflow: hidden
+    }
+
+    #webgl-canvas,
+    #hud-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%
     }
 
     #webgl-canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 1;
+      z-index: 1
     }
 
     #hud-canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 2;
-      pointer-events: none;
+      z-index: 4;
+      pointer-events: none
     }
 
     #loading {
       position: absolute;
-      top: 50%;
+      z-index: 20;
       left: 50%;
+      top: 50%;
       transform: translate(-50%, -50%);
-      color: #00ffff;
-      font-family: monospace;
-      font-size: 24px;
+      color: #8eeeff;
+      font: 600 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: .24em;
+      text-align: center;
+      text-shadow: 0 0 18px #00d9ff
+    }
+
+    #vignette {
+      position: absolute;
       z-index: 3;
-      text-shadow: 0 0 10px #00ffff;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(ellipse at center, transparent 42%, rgba(0, 4, 10, .18) 70%, rgba(0, 0, 0, .7) 100%)
+    }
+
+    #damage-flash {
+      position: absolute;
+      z-index: 5;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      background: radial-gradient(ellipse at center, transparent 45%, rgba(255, 35, 35, .35) 100%)
+    }
+
+    #touch-hint {
+      position: absolute;
+      z-index: 10;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(180, 240, 255, .55);
+      font: 10px ui-monospace, monospace;
+      letter-spacing: .16em;
+      padding: 8px 12px;
+      border: 1px solid rgba(70, 220, 255, .16);
+      background: rgba(2, 10, 18, .45);
+      border-radius: 3px;
+      transition: opacity 1s
     }
   </style>
   <script type="importmap">
     {
-            "imports": {
-                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
-            }
-        }
-    </script>
+  "imports":{
+    "three":"https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/":"https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
 </head>
 
 <body>
-
   <div id="game-container">
-    <div id="loading">INITIALIZING SYSTEMS...</div>
+    <div id="loading">INITIALIZING FLIGHT
+      SYSTEMS<br><span style="font-size:9px;opacity:.6">OPTICAL / POWER / TARGETING / FLIGHT MODEL</span></div>
     <canvas id="webgl-canvas"></canvas>
     <canvas id="hud-canvas"></canvas>
+    <div id="vignette"></div>
+    <div id="damage-flash"></div>
+    <div id="touch-hint">LEFT: FLIGHT · RIGHT: LOOK · TAP: LOCK TARGET</div>
   </div>
 
   <script type="module">
     import * as THREE from 'three';
-    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
+import {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';
+import {RenderPass} from 'three/addons/postprocessing/RenderPass.js';
+import {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';
 
-    // --- 1. SETUP & VARIABLES ---
-    const webglCanvas = document.getElementById('webgl-canvas');
-    const hudCanvas = document.getElementById('hud-canvas');
-    const hudCtx = hudCanvas.getContext('2d');
-    const loadingEl = document.getElementById('loading');
+/* ------------------------------------------------------------------ *
+ * DOM
+ * ------------------------------------------------------------------ */
+const canvas   = document.getElementById('webgl-canvas');
+const hud      = document.getElementById('hud-canvas');
+const ctx      = hud.getContext('2d', {alpha: true});
+const loading  = document.getElementById('loading');
+const damageFlash = document.getElementById('damage-flash');
+const hint     = document.getElementById('touch-hint');
 
-    let scene, camera, renderer, clock;
-    let shipGroup;
-    
-    // Flight Dynamics
-    let pitch = 0, yaw = 0, roll = 0;
-    let targetPitch = 0, targetYaw = 0, targetRoll = 0;
-    
-    // Game State for HUD
-    let gameState = {
-        speed: 100,
-        throttle: 75,
-        health: 87,
-        ammo: 1600
-    };
+/* ------------------------------------------------------------------ *
+ * GLOBALS
+ * ------------------------------------------------------------------ */
+let scene, camera, renderer, composer, clock, shipGroup, targetShip, stars;
+let shipModel = null;
 
-    // Input
-    const input = { x: 0, y: 0, isTouching: false, startX: 0, startY: 0 };
+const chunks = new Map();
+const CHUNK = 1400, VIEW = 2;
 
-    // Terrain
-    const CHUNK_SIZE = 1500;
-    const VIEW_DISTANCE = 3;
-    const chunks = new Map();
-    let terrainMaterial;
+/* Reusable math objects — the old code allocated ~6 Vector3/Euler per
+ * frame which fed the GC and caused periodic hitches. */
+const _forward   = new THREE.Vector3();
+const _offset    = new THREE.Vector3();
+const _euler     = new THREE.Euler(0, 0, 0, 'YXZ');
+const _camTarget = new THREE.Vector3();
+const _lookAt    = new THREE.Vector3();
+const _rel       = new THREE.Vector3();
+const _proj      = new THREE.Vector3();
 
-    // --- 2. INITIALIZATION ---
-    function init() {
-        scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x050a15, 0.0004);
+const state = {
+  speed: 145, throttle: 62, health: 87, shield: 74, fuel: 91, power: 88, heat: 23,
+  ammo: 1600, missiles: 6, locked: false, boost: false, damage: 0,
+  targetDistance: 0, targetClosing: 0, targetHealth: 100,
+  yaw: 0, pitch: 0, roll: 0,
+  targetYaw: 0, targetPitch: 0, targetRoll: 0,
+  steering: {x: 0, y: 0}, look: {x: 0, y: 0},
+  weaponIndex: 0, time: 0, lastHit: 0
+};
 
-        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 15000);
-        
-        renderer = new THREE.WebGLRenderer({ canvas: webglCanvas, antialias: true, powerPreference: "high-performance" });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+const keys = {};
+let leftTouchId = null, rightTouchId = null;
+let leftStart = {x: 0, y: 0}, rightStart = {x: 0, y: 0};
+const cameraOrbit = {x: 0, y: 0};
 
-        clock = new THREE.Clock();
+const cyan = '#6defff', blue = '#35bfff', amber = '#ff9d42', red = '#ff4b58', green = '#9cffc2';
 
-        // Lighting for the terrain
-        const ambientLight = new THREE.AmbientLight(0x334455, 2.0);
-        scene.add(ambientLight);
-        const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
-        dirLight.position.set(1000, 2000, 500);
-        scene.add(dirLight);
+/* ------------------------------------------------------------------ *
+ * ADAPTIVE RESOLUTION
+ * The single biggest win after removing the lights: keep the frame
+ * budget by scaling the render resolution instead of dropping frames.
+ * ------------------------------------------------------------------ */
+const MAX_SCALE = Math.min(window.devicePixelRatio || 1, 1.5);
+const quality = {scale: MAX_SCALE, min: 0.6, max: MAX_SCALE, acc: 0, frames: 0, cooldown: 0};
 
-        shipGroup = new THREE.Group();
-        shipGroup.position.set(0, 300, 0);
-        scene.add(shipGroup);
+function applyQuality() {
+  renderer.setPixelRatio(quality.scale);
+  if (composer.setPixelRatio) composer.setPixelRatio(quality.scale);
+  composer.setSize(innerWidth, innerHeight);
+}
 
-        // Terrain Material
-        terrainMaterial = new THREE.MeshStandardMaterial({
-            color: 0x112233,
-            emissive: 0x001122,
-            wireframe: false,
-            flatShading: true,
-            roughness: 0.9,
-            metalness: 0.1
-        });
+function adaptQuality(dt) {
+  quality.acc += dt;
+  quality.frames++;
+  if (quality.cooldown > 0) quality.cooldown -= dt;
+  if (quality.frames < 50) return;
 
-        loadShipModel();
-        resizeHUD();
-        
-        window.addEventListener('resize', onWindowResize);
-        setupControls();
+  const avg = quality.acc / quality.frames;
+  quality.acc = 0;
+  quality.frames = 0;
+  if (quality.cooldown > 0) return;
 
-        loadingEl.style.display = 'none';
-        animate();
+  if (avg > 0.022 && quality.scale > quality.min) {
+    quality.scale = Math.max(quality.min, quality.scale - 0.25);
+    applyQuality();
+    quality.cooldown = 2.0;
+  } else if (avg < 0.0135 && quality.scale < quality.max) {
+    quality.scale = Math.min(quality.max, quality.scale + 0.25);
+    applyQuality();
+    quality.cooldown = 2.5;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * INIT
+ * ------------------------------------------------------------------ */
+function init() {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x01050c);
+  scene.fog = new THREE.FogExp2(0x07121e, 0.00034);
+
+  camera = new THREE.PerspectiveCamera(72, innerWidth / innerHeight, 0.08, 18000);
+
+  renderer = new THREE.WebGLRenderer({
+    canvas,
+    antialias: false,           // MSAA is wasted: we render through a composer
+    powerPreference: 'high-performance',
+    stencil: false,
+    depth: true
+  });
+  renderer.setPixelRatio(quality.scale);
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.15;
+
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.62, 0.72, 0.82));
+
+  clock = new THREE.Clock();
+
+  /* ---- Lighting: exactly THREE lights, forever. -------------------
+   * The original spawned 7 PointLights per chunk and never removed
+   * them; after a minute of flight the scene had 100+ dynamic lights,
+   * forcing Three.js to recompile every material and evaluate every
+   * light per fragment. That was the 3 FPS. */
+  scene.add(new THREE.HemisphereLight(0x9fdcff, 0x03060b, 1.65));
+
+  const sun = new THREE.DirectionalLight(0xfff1d2, 3.5);
+  sun.position.set(-900, 1400, 500);
+  scene.add(sun);
+
+  const rim = new THREE.PointLight(0x25bfff, 12, 900, 2);
+  rim.position.set(0, 350, 250);
+  scene.add(rim);
+
+  shipGroup = new THREE.Group();
+  shipGroup.position.set(0, 260, 0);
+  scene.add(shipGroup);
+
+  makeEnvironment();
+  makeTarget();
+  loadShip();
+  setupControls();
+  resize();
+
+  loading.style.display = 'none';
+  setTimeout(() => hint.style.opacity = '0', 4500);
+  animate();
+}
+
+/* ------------------------------------------------------------------ *
+ * ENVIRONMENT
+ * ------------------------------------------------------------------ */
+function makeEnvironment() {
+  /* Starfield — 6000 points is plenty and cuts vertex cost by 30%. */
+  const count = 6000;
+  const pos = new Float32Array(count * 3);
+  const col = new Float32Array(count * 3);
+  for (let i = 0; i < count; i++) {
+    const r = 5000 + Math.random() * 9000;
+    const a = Math.random() * Math.PI * 2;
+    const b = Math.acos(2 * Math.random() - 1);
+    pos[i * 3]     = Math.sin(b) * Math.cos(a) * r;
+    pos[i * 3 + 1] = Math.cos(b) * r;
+    pos[i * 3 + 2] = Math.sin(b) * Math.sin(a) * r;
+    const warm = Math.random();
+    col[i * 3]     = 0.60 + warm * 0.35;
+    col[i * 3 + 1] = 0.75 + warm * 0.20;
+    col[i * 3 + 2] = 1.0;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const mat = new THREE.PointsMaterial({
+    size: 2.2, vertexColors: true, transparent: true, opacity: 0.82,
+    sizeAttenuation: true, depthWrite: false, fog: false
+  });
+  stars = new THREE.Points(geo, mat);
+  stars.frustumCulled = false;
+  scene.add(stars);
+
+  /* Nebula volumes — additive spheres are pure fill-rate, so keep the
+   * count and tessellation low. 8 large quads-ish shells instead of 14. */
+  const nebulaGeo = new THREE.SphereGeometry(1, 16, 10);
+  for (let i = 0; i < 8; i++) {
+    const m = new THREE.MeshBasicMaterial({
+      color: i % 3 === 0 ? 0x087bba : 0x173d7c,
+      transparent: true,
+      opacity: 0.018 + Math.random() * 0.018,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false
+    });
+    const s = new THREE.Mesh(nebulaGeo, m);
+    const rad = 700 + Math.random() * 900;
+    s.position.set((Math.random() - .5) * 6500, (Math.random() - .5) * 2400, (Math.random() - .5) * 6500);
+    s.scale.set(rad * 1.8, rad * 0.45, rad * 0.9);
+    s.matrixAutoUpdate = false;
+    s.updateMatrix();
+    scene.add(s);
+  }
+
+  /* Distant planet with a rim-lit atmosphere shell. */
+  const planet = new THREE.Mesh(
+    new THREE.SphereGeometry(2200, 40, 20),
+    new THREE.MeshStandardMaterial({color: 0x10202a, roughness: 1, metalness: 0.02})
+  );
+  planet.position.set(5200, -1800, -7800);
+  planet.matrixAutoUpdate = false;
+  planet.updateMatrix();
+  scene.add(planet);
+
+  const glowMat = new THREE.ShaderMaterial({
+    transparent: true, depthWrite: false, side: THREE.BackSide,
+    blending: THREE.AdditiveBlending, fog: false,
+    uniforms: {color: {value: new THREE.Color(0x38b9ff)}},
+    vertexShader: `varying vec3 vN; void main(){vN=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+    fragmentShader: `uniform vec3 color; varying vec3 vN; void main(){float rim=pow(1.0-max(0.0,vN.z),2.8);gl_FragColor=vec4(color,rim*.22);}`
+  });
+  const planetGlow = new THREE.Mesh(new THREE.SphereGeometry(2260, 24, 12), glowMat);
+  planetGlow.position.copy(planet.position);
+  planetGlow.matrixAutoUpdate = false;
+  planetGlow.updateMatrix();
+  scene.add(planetGlow);
+
+  updateTerrain(true);
+}
+
+function noise(x, z) {
+  return Math.sin(x * .0022) * Math.cos(z * .0020) * 95 +
+         Math.sin(x * .008 + 1.2) * Math.cos(z * .009) * 34 +
+         Math.sin(x * .028) * Math.cos(z * .024) * 10 +
+         Math.sin(x * .09 + 2) * Math.cos(z * .08) * 2.5;
+}
+
+/* Shared materials — the old code created a brand-new material per
+ * chunk, which defeated Three.js' program cache. */
+const terrainMat = new THREE.MeshStandardMaterial({
+  color: 0x24343a, roughness: .86, metalness: .08,
+  emissive: 0x06141b, emissiveIntensity: .45
+});
+
+const markerMat = new THREE.PointsMaterial({
+  color: 0x2b9fff, size: 9, transparent: true, opacity: .55,
+  blending: THREE.AdditiveBlending, depthWrite: false,
+  sizeAttenuation: true, fog: false
+});
+
+let lastChunkX = Infinity, lastChunkZ = Infinity;
+
+function generateChunk(cx, cz) {
+  const key = cx + ',' + cz;
+  if (chunks.has(key)) return;
+
+  const geo = new THREE.PlaneGeometry(CHUNK, CHUNK, 48, 48);
+  geo.rotateX(-Math.PI / 2);
+  const p = geo.attributes.position.array;
+  for (let i = 0; i < p.length; i += 3) {
+    const x = p[i] + cx * CHUNK, z = p[i + 2] + cz * CHUNK;
+    p[i + 1] = noise(x, z);
+  }
+  geo.computeVertexNormals();
+
+  const mesh = new THREE.Mesh(geo, terrainMat);
+  mesh.position.set(cx * CHUNK, 0, cz * CHUNK);
+  mesh.matrixAutoUpdate = false;
+  mesh.updateMatrix();
+  scene.add(mesh);
+
+  /* Atmospheric markers used to be 7 real PointLights per chunk.
+   * They are now one additive Points cloud — 1 draw call, 0 lights. */
+  if ((cx * 7 + cz * 13) % 3 === 0) {
+    const n = 7;
+    const mp = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      mp[i * 3]     = (Math.random() - .5) * CHUNK * 0.9;
+      mp[i * 3 + 1] = 25 + Math.random() * 95;
+      mp[i * 3 + 2] = (Math.random() - .5) * CHUNK * 0.9;
     }
+    const mg = new THREE.BufferGeometry();
+    mg.setAttribute('position', new THREE.BufferAttribute(mp, 3));
+    mesh.add(new THREE.Points(mg, markerMat));
+  }
 
-    // --- 3. SHIP MODEL LOADING ---
-    function loadShipModel() {
-        const loader = new GLTFLoader();
-        loader.load('assets/spaceship.glb', (gltf) => {
-            const model = gltf.scene;
-            model.scale.set(1, 1, 1); 
-            
-            // FIX: Rotate model 180 degrees so it faces the correct direction
-            model.rotation.y = Math.PI; 
-            
-            shipGroup.add(model);
-        }, undefined, (error) => {
-            console.warn("Could not load spaceship.glb. Using fallback.");
-            const geometry = new THREE.ConeGeometry(2, 10, 8);
-            geometry.rotateX(Math.PI / 2);
-            const material = new THREE.MeshStandardMaterial({ color: 0x00aaff, wireframe: true });
-            const fallback = new THREE.Mesh(geometry, material);
-            
-            // FIX: Rotate fallback 180 degrees
-            fallback.rotation.y = Math.PI;
-            
-            shipGroup.add(fallback);
-        });
+  chunks.set(key, mesh);
+}
+
+function disposeChunk(mesh) {
+  mesh.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+  /* materials are shared — never dispose them here */
+}
+
+/* Only rebuild when the ship actually crosses a chunk boundary. */
+function updateTerrain(force = false) {
+  const px = Math.floor(shipGroup.position.x / CHUNK);
+  const pz = Math.floor(shipGroup.position.z / CHUNK);
+  if (!force && px === lastChunkX && pz === lastChunkZ) return;
+  lastChunkX = px;
+  lastChunkZ = pz;
+
+  for (let x = -VIEW; x <= VIEW; x++) {
+    for (let z = -VIEW; z <= VIEW; z++) generateChunk(px + x, pz + z);
+  }
+
+  for (const [key, m] of chunks) {
+    const [x, z] = key.split(',').map(Number);
+    if (Math.abs(x - px) > VIEW + 1 || Math.abs(z - pz) > VIEW + 1) {
+      scene.remove(m);
+      disposeChunk(m);
+      chunks.delete(key);
     }
+  }
+}
 
-    // --- 4. INFINITE TERRAIN GENERATION ---
-    function noise(x, z) {
-        const p1 = Math.sin(x * 0.005) * Math.cos(z * 0.005) * 100;
-        const p2 = Math.sin(x * 0.02 + 1.3) * Math.cos(z * 0.02 + 2.1) * 30;
-        const p3 = Math.sin(x * 0.1) * Math.cos(z * 0.1) * 5;
-        return p1 + p2 + p3;
-    }
+/* ------------------------------------------------------------------ *
+ * TARGET + SHIP
+ * ------------------------------------------------------------------ */
+function makeTarget() {
+  const g = new THREE.Group();
+  const core = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(26, 1),
+    new THREE.MeshStandardMaterial({color: 0x2c3540, roughness: .48, metalness: .7, emissive: 0x230b05, emissiveIntensity: .4})
+  );
+  g.add(core);
 
-    function generateChunk(cx, cz) {
-        const key = `${cx},${cz}`;
-        if (chunks.has(key)) return;
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(34, 1.4, 6, 48),
+    new THREE.MeshBasicMaterial({color: 0xff6d35, fog: false})
+  );
+  ring.rotation.x = Math.PI / 2;
+  g.add(ring);
 
-        const geometry = new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE, 24, 24);
-        geometry.rotateX(-Math.PI / 2);
+  g.add(new THREE.PointLight(0xff4e22, 10, 300, 2));
+  g.position.set(480, 330, -850);
+  targetShip = g;
+  scene.add(g);
+}
 
-        const vertices = geometry.attributes.position.array;
-        for (let i = 0; i < vertices.length; i += 3) {
-            const x = vertices[i] + (cx * CHUNK_SIZE);
-            const z = vertices[i + 2] + (cz * CHUNK_SIZE);
-            vertices[i + 1] = noise(x, z);
+function loadShip() {
+  new GLTFLoader().load('assets/spaceship.glb', gltf => {
+    shipModel = gltf.scene;
+    shipModel.scale.setScalar(2.15);
+    shipModel.rotation.y = Math.PI;
+    shipModel.traverse(o => {
+      if (o.isMesh) {
+        o.castShadow = false;
+        o.receiveShadow = false;
+        if (o.material) {
+          o.material.roughness = Math.min(o.material.roughness ?? .7, .62);
+          o.material.metalness = Math.max(o.material.metalness ?? 0, .35);
         }
+      }
+    });
+    shipGroup.add(shipModel);
+  }, undefined, () => {
+    const g = new THREE.ConeGeometry(5, 22, 12);
+    g.rotateX(Math.PI / 2);
+    const m = new THREE.MeshStandardMaterial({color: 0x8ba5b8, metalness: .75, roughness: .28});
+    const fallback = new THREE.Mesh(g, m);
+    fallback.rotation.y = Math.PI;
+    shipGroup.add(fallback);
+  });
+}
 
-        geometry.computeVertexNormals();
-        const mesh = new THREE.Mesh(geometry, terrainMaterial);
-        mesh.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
-        scene.add(mesh);
-        chunks.set(key, mesh);
+/* ------------------------------------------------------------------ *
+ * CONTROLS
+ * ------------------------------------------------------------------ */
+function setupControls() {
+  addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (e.code === 'KeyR') state.locked = !state.locked;
+    if (e.code === 'Digit1') state.weaponIndex = 0;
+    if (e.code === 'Digit2') state.weaponIndex = 1;
+    if (e.code === 'Space') { state.boost = true; e.preventDefault(); }
+  });
+  addEventListener('keyup', e => {
+    keys[e.code] = false;
+    if (e.code === 'Space') state.boost = false;
+  });
+
+  const c = document.getElementById('game-container');
+
+  c.addEventListener('pointerdown', e => {
+    if (e.clientX < innerWidth / 2) {
+      leftTouchId = e.pointerId;
+      leftStart = {x: e.clientX, y: e.clientY};
+    } else {
+      rightTouchId = e.pointerId;
+      rightStart = {x: e.clientX, y: e.clientY};
     }
+  });
 
-    function updateTerrain() {
-        const playerChunkX = Math.floor(shipGroup.position.x / CHUNK_SIZE);
-        const playerChunkZ = Math.floor(shipGroup.position.z / CHUNK_SIZE);
-
-        for (let x = -VIEW_DISTANCE; x <= VIEW_DISTANCE; x++) {
-            for (let z = -VIEW_DISTANCE; z <= VIEW_DISTANCE; z++) {
-                generateChunk(playerChunkX + x, playerChunkZ + z);
-            }
-        }
-
-        chunks.forEach((mesh, key) => {
-            const [cx, cz] = key.split(',').map(Number);
-            if (Math.abs(cx - playerChunkX) > VIEW_DISTANCE + 1 || Math.abs(cz - playerChunkZ) > VIEW_DISTANCE + 1) {
-                scene.remove(mesh);
-                mesh.geometry.dispose();
-                chunks.delete(key);
-            }
-        });
+  c.addEventListener('pointermove', e => {
+    if (e.pointerId === leftTouchId) {
+      state.steering.x = THREE.MathUtils.clamp((e.clientX - leftStart.x) / (innerWidth * .22), -1, 1);
+      state.steering.y = THREE.MathUtils.clamp((e.clientY - leftStart.y) / (innerHeight * .22), -1, 1);
+    } else if (e.pointerId === rightTouchId) {
+      const dx = e.clientX - rightStart.x, dy = e.clientY - rightStart.y;
+      cameraOrbit.x -= dx * .0045;
+      cameraOrbit.y = THREE.MathUtils.clamp(cameraOrbit.y - dy * .0045, -1.0, 1.0);
+      rightStart = {x: e.clientX, y: e.clientY};
     }
+  });
 
-    // --- 5. CONTROLS ---
-    function setupControls() {
-        const container = document.getElementById('game-container');
+  const end = e => {
+    if (e.pointerId === leftTouchId) { leftTouchId = null; state.steering.x = 0; state.steering.y = 0; }
+    if (e.pointerId === rightTouchId) rightTouchId = null;
+  };
+  c.addEventListener('pointerup', end);
+  c.addEventListener('pointercancel', end);
+  /* Catch releases that happen outside the container (drag off-window). */
+  addEventListener('pointerup', end);
+  addEventListener('pointercancel', end);
+  addEventListener('blur', () => {
+    leftTouchId = rightTouchId = null;
+    state.steering.x = state.steering.y = 0;
+    state.boost = false;
+    for (const k in keys) keys[k] = false;
+  });
 
-        container.addEventListener('pointerdown', (e) => {
-            input.isTouching = true;
-            input.startX = e.clientX;
-            input.startY = e.clientY;
-        });
-
-        container.addEventListener('pointermove', (e) => {
-            if (!input.isTouching) return;
-            const deltaX = e.clientX - input.startX;
-            const deltaY = e.clientY - input.startY;
-            
-            targetYaw = -(deltaX / (window.innerWidth * 0.4));
-            targetPitch = -(deltaY / (window.innerHeight * 0.4));
-            
-            gameState.throttle = 75 + (targetPitch * 20);
-        });
-
-        container.addEventListener('pointerup', () => {
-            input.isTouching = false;
-            targetYaw = 0;
-            targetPitch = 0;
-            gameState.throttle = 75;
-        });
+  c.addEventListener('click', e => {
+    if (e.clientX > innerWidth * .35 && e.clientX < innerWidth * .65 &&
+        e.clientY > innerHeight * .25 && e.clientY < innerHeight * .75) {
+      state.locked = true;
     }
+  });
+}
 
-    // --- 6. HUD RENDERING ---
-    function resizeHUD() {
-        hudCanvas.width = window.innerWidth;
-        hudCanvas.height = window.innerHeight;
+/* Frame-rate independent key steering.
+ * The original only lerped when a key was down, so releasing a key left
+ * the ship spinning forever. */
+function readKeyboard(dt) {
+  if (leftTouchId !== null) return;   // virtual stick has priority
+
+  let x = 0, y = 0;
+  if (keys.KeyA || keys.ArrowLeft)  x -= 1;
+  if (keys.KeyD || keys.ArrowRight) x += 1;
+  if (keys.KeyW || keys.ArrowUp)    y -= 1;
+  if (keys.KeyS || keys.ArrowDown)  y += 1;
+
+  const t = 1 - Math.pow(1 - 0.16, dt * 60);
+  state.steering.x = THREE.MathUtils.lerp(state.steering.x, x, t);
+  state.steering.y = THREE.MathUtils.lerp(state.steering.y, y, t);
+}
+
+/* ------------------------------------------------------------------ *
+ * RESIZE (rAF-throttled — mobile fires resize dozens of times)
+ * ------------------------------------------------------------------ */
+let resizePending = false;
+function resize() {
+  if (resizePending) return;
+  resizePending = true;
+  requestAnimationFrame(() => {
+    resizePending = false;
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+    if (composer.setPixelRatio) composer.setPixelRatio(quality.scale);
+    composer.setSize(innerWidth, innerHeight);
+    hud.width = innerWidth;
+    hud.height = innerHeight;
+  });
+}
+addEventListener('resize', resize);
+
+/* ------------------------------------------------------------------ *
+ * HUD PRIMITIVES
+ * ------------------------------------------------------------------ */
+const fontCache = new Map();
+function setFont(size) {
+  let f = fontCache.get(size);
+  if (f === undefined) {
+    f = size + 'px ui-monospace,SFMono-Regular,Menlo,monospace';
+    fontCache.set(size, f);
+  }
+  ctx.font = f;
+}
+
+function txt(s, x, y, size = 11, color = cyan, align = 'left', alpha = 1) {
+  if (alpha !== 1) ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  setFont(size);
+  ctx.textAlign = align;
+  ctx.fillText(s, x, y);
+  if (alpha !== 1) ctx.globalAlpha = 1;
+}
+
+function line(points, color = cyan, w = 1, a = 1) {
+  ctx.globalAlpha = a;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = w;
+  ctx.beginPath();
+  ctx.moveTo(points[0][0], points[0][1]);
+  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i][0], points[i][1]);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function bar(x, y, w, h, value, color = cyan, back = 'rgba(80,180,210,.13)') {
+  ctx.fillStyle = back;
+  ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, w * THREE.MathUtils.clamp(value, 0, 1), h);
+}
+
+/* Cached scanline pattern — the old loop issued ~270 fillRect calls
+ * on a 1080p canvas every single frame. */
+let scanPattern = null;
+function getScanPattern() {
+  if (scanPattern) return scanPattern;
+  const c = document.createElement('canvas');
+  c.width = 1;
+  c.height = 4;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(100,220,255,.018)';
+  g.fillRect(0, 0, 1, 1);
+  scanPattern = ctx.createPattern(c, 'repeat');
+  return scanPattern;
+}
+
+/* ------------------------------------------------------------------ *
+ * HUD DRAWING
+ * ------------------------------------------------------------------ */
+function drawCockpitFrame(w, h) {
+  ctx.save();
+  ctx.lineJoin = 'round';
+  /* canvas shadowBlur is extremely expensive on large paths; we fake the
+   * glow with a two-pass stroke instead. */
+  ctx.fillStyle = 'rgba(1,5,10,.76)';
+  ctx.strokeStyle = 'rgba(76,220,255,.8)';
+  ctx.lineWidth = 1.2;
+
+  ctx.beginPath();
+  ctx.moveTo(0, 0); ctx.lineTo(w, 0); ctx.lineTo(w * .86, h * .095); ctx.lineTo(w * .62, h * .075);
+  ctx.lineTo(w * .50, h * .12); ctx.lineTo(w * .38, h * .075); ctx.lineTo(w * .14, h * .095);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(0, 0); ctx.lineTo(w * .14, h * .095); ctx.lineTo(w * .075, h * .78); ctx.lineTo(0, h);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(w, 0); ctx.lineTo(w * .86, h * .095); ctx.lineTo(w * .925, h * .78); ctx.lineTo(w, h);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+
+  ctx.beginPath();
+  ctx.moveTo(0, h); ctx.lineTo(w, h); ctx.lineTo(w * .90, h * .855); ctx.lineTo(w * .60, h * .80);
+  ctx.lineTo(w * .40, h * .80); ctx.lineTo(w * .10, h * .855);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+
+  ctx.strokeStyle = 'rgba(90,225,255,.25)';
+  line([[w * .14, h * .095], [w * .23, h * .43], [w * .30, h * .74]], cyan, 1, .25);
+  line([[w * .86, h * .095], [w * .77, h * .43], [w * .70, h * .74]], cyan, 1, .25);
+  ctx.restore();
+}
+
+function drawTop(w, h) {
+  txt('FLIGHT', w * .50, h * .035, 9, cyan, 'center');
+  const modes = ['COMBAT', 'STARMAP', 'MINING', 'GROUND'];
+  modes.forEach((m, i) => txt(m, w * (.44 + i * .055), h * .035, 8, i === 0 ? '#a7f4ff' : '#57717b', 'center'));
+  txt('OXY', w * .26, h * .082, 8, '#6f929f');
+  txt('HULL', w * .46, h * .082, 8, '#6f929f');
+  txt('FUEL', w * .60, h * .082, 8, '#6f929f');
+  txt('PWR', w * .72, h * .082, 8, '#6f929f');
+  bar(w * .255, h * .092, 82, 3, state.fuel / 100, state.fuel < 25 ? red : cyan);
+  bar(w * .455, h * .092, 82, 3, state.health / 100, state.health < 30 ? red : cyan);
+  bar(w * .595, h * .092, 82, 3, state.fuel / 100, state.fuel < 25 ? amber : cyan);
+  bar(w * .715, h * .092, 82, 3, state.power / 100, state.power < 30 ? red : '#e8b44a');
+}
+
+function drawCenter(w, h) {
+  const cx = w / 2, cy = h * .49;
+  const vx = cx + state.steering.x * 54, vy = cy + state.steering.y * 54;
+
+  ctx.strokeStyle = cyan;
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = .9;
+  ctx.beginPath();
+  ctx.moveTo(vx - 64, vy); ctx.lineTo(vx - 20, vy);
+  ctx.moveTo(vx + 20, vy); ctx.lineTo(vx + 64, vy);
+  ctx.moveTo(vx, vy - 64); ctx.lineTo(vx, vy - 20);
+  ctx.moveTo(vx, vy + 20); ctx.lineTo(vx, vy + 64);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.arc(vx, vy, 3, 0, Math.PI * 2);
+  ctx.stroke();
+
+  for (let i = -3; i <= 3; i++) {
+    if (i === 0) continue;
+    const yy = cy + i * 34 + state.pitch * 80;
+    const len = i % 2 ? 30 : 48;
+    line([[cx - len, yy], [cx - len + 18, yy], [cx + len - 18, yy], [cx + len, yy]], cyan, 1, .28);
+    txt((i * 10) + '°', cx + len + 8, yy + 3, 7, '#5e8994');
+  }
+
+  /* Lock box follows the projected target. */
+  _proj.copy(targetShip.position).project(camera);
+  const tx = (_proj.x * .5 + .5) * w;
+  const ty = (-_proj.y * .5 + .5) * h;
+  const visible = _proj.z < 1 && tx > -80 && tx < w + 80 && ty > -80 && ty < h + 80;
+
+  if (visible) {
+    const col = state.locked ? red : amber;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = state.locked ? 2 : 1.3;
+    const r = state.locked ? 36 : 27;
+    ctx.beginPath();
+    ctx.arc(tx, ty, r, 0, Math.PI * 2);
+    ctx.stroke();
+    line([[tx - r - 12, ty - r], [tx - r, ty - r], [tx - r, ty - r + 10]], col, 1.5);
+    line([[tx + r + 12, ty - r], [tx + r, ty - r], [tx + r, ty - r + 10]], col, 1.5);
+    line([[tx - r - 12, ty + r], [tx - r, ty + r], [tx - r, ty + r - 10]], col, 1.5);
+    line([[tx + r + 12, ty + r], [tx + r, ty + r], [tx + r, ty + r - 10]], col, 1.5);
+    txt(state.locked ? 'LOCKED' : 'TRACKING', tx, ty - r - 15, 8, col, 'center');
+    txt(Math.round(state.targetDistance) + ' m', tx, ty + r + 17, 9, col, 'center');
+    if (state.locked) txt('MISSILE SOLUTION  ' + Math.round(state.targetHealth) + '%', tx, ty + r + 31, 7, red, 'center');
+  }
+  ctx.globalAlpha = 1;
+}
+
+function drawLeft(w, h) {
+  const x = w * .055;
+
+  ctx.strokeStyle = 'rgba(110,238,255,.75)';
+  ctx.lineWidth = 1;
+  ctx.save();
+  ctx.translate(x + 38, h * .19);
+  ctx.rotate(state.roll * .55);
+  ctx.beginPath();
+  ctx.moveTo(0, -48); ctx.lineTo(16, -16); ctx.lineTo(18, 28); ctx.lineTo(0, 50);
+  ctx.lineTo(-18, 28); ctx.lineTo(-16, -16); ctx.closePath();
+  ctx.moveTo(0, -22); ctx.lineTo(-48, 8); ctx.lineTo(-32, 22); ctx.lineTo(-12, 16);
+  ctx.moveTo(0, -22); ctx.lineTo(48, 8); ctx.lineTo(32, 22); ctx.lineTo(12, 16);
+  ctx.stroke();
+  ctx.restore();
+
+  txt('LAT ' + (state.steering.x * 12).toFixed(1), x, h * .315, 9, cyan);
+  txt('LNG ' + (-state.steering.y * 12).toFixed(1), x, h * .335, 9, cyan);
+  txt('VRT ' + (state.speed / 10).toFixed(1), x, h * .355, 9, cyan);
+
+  const weapons = [['CF-117 BALL TURRET', state.ammo, 1600], ['NN-14 NEUTRON GUN', state.heat, 100]];
+  weapons.forEach((a, i) => {
+    const yy = h * (.43 + i * .095);
+    const active = state.weaponIndex === i;
+    txt((active ? '▶ ' : '') + a[0], x, yy, 9, active ? '#d9ffff' : '#7696a0');
+    if (i === 0) {
+      txt(Math.max(0, Math.round(a[1])) + ' / ' + a[2], x, yy + 18, 9, cyan);
+      bar(x, yy + 24, 110, 3, a[1] / a[2], cyan);
+    } else {
+      txt(Math.round(100 - a[1]) + '% READY', x, yy + 18, 9, state.heat > 75 ? red : cyan);
+      bar(x, yy + 24, 110, 3, 1 - a[1] / 100, state.heat > 75 ? red : cyan);
     }
+  });
 
-    function drawHUD() {
-        const w = hudCanvas.width;
-        const h = hudCanvas.height;
-        const cx = w / 2;
-        const cy = h / 2;
-        
-        hudCtx.clearRect(0, 0, w, h);
+  txt('THR ' + Math.round(state.throttle) + '%', x, h * .65, 9, cyan);
+  bar(x, h * .665, 110, 5, state.throttle / 100, state.boost ? amber : cyan);
+  txt(state.boost ? 'BOOST / OVERDRIVE' : 'CRUISE', x, h * .695, 7, state.boost ? amber : '#6c8790');
+}
 
-        // Cockpit Frame
-        hudCtx.fillStyle = 'rgba(5, 8, 12, 0.95)';
-        hudCtx.strokeStyle = '#00ffff';
-        hudCtx.lineWidth = 2;
-        hudCtx.shadowColor = '#00ffff';
-        hudCtx.shadowBlur = 10;
+function drawRight(w, h) {
+  const x = w * .825;
+  txt('CONTACTS', x, h * .20, 8, '#6e929d');
+  txt('VANDUUL SCYTHE', x, h * .235, 10, state.locked ? red : cyan);
+  txt('DREAD PIRATE / HOSTILE', x, h * .255, 8, '#879da5');
+  txt(Math.round(state.targetDistance) + ' m', x, h * .278, 9, amber);
+  bar(x, h * .292, w * .11, 3, state.targetHealth / 100, state.targetHealth < 30 ? red : amber);
 
-        hudCtx.beginPath(); hudCtx.moveTo(0, 0); hudCtx.lineTo(w, 0); hudCtx.lineTo(w * 0.85, h * 0.08); hudCtx.lineTo(w * 0.15, h * 0.08); hudCtx.closePath(); hudCtx.fill(); hudCtx.stroke();
-        hudCtx.beginPath(); hudCtx.moveTo(0, 0); hudCtx.lineTo(w * 0.15, h * 0.08); hudCtx.lineTo(w * 0.1, h * 0.8); hudCtx.lineTo(0, h); hudCtx.closePath(); hudCtx.fill(); hudCtx.stroke();
-        hudCtx.beginPath(); hudCtx.moveTo(w, 0); hudCtx.lineTo(w * 0.85, h * 0.08); hudCtx.lineTo(w * 0.9, h * 0.8); hudCtx.lineTo(w, h); hudCtx.closePath(); hudCtx.fill(); hudCtx.stroke();
-        hudCtx.beginPath(); hudCtx.moveTo(0, h); hudCtx.lineTo(w, h); hudCtx.lineTo(w * 0.9, h * 0.85); hudCtx.lineTo(w * 0.1, h * 0.85); hudCtx.closePath(); hudCtx.fill(); hudCtx.stroke();
+  for (let i = 0; i < 3; i++) {
+    const yy = h * (.36 + i * .085);
+    const active = i === 0;
+    ctx.strokeStyle = active ? 'rgba(255,100,60,.8)' : 'rgba(120,150,160,.25)';
+    ctx.strokeRect(w * .885, yy, 20, 20);
+    txt(String(i + 1), w * .875, yy + 14, 8, active ? amber : '#60737c', 'right');
+    line([[w * .885, yy], [w * .87, yy - 5], [w * .87, yy + 25]], active ? amber : '#50636b', 1);
+  }
+  txt('RN ' + Math.round(state.targetDistance * 1.6) + ' / ' + Math.round(state.speed * 2.2) + ' m/s', x, h * .64, 8, '#8da1a8');
+  txt('THREAT ' + (state.locked ? 'LOCKED' : 'TRACKING'), x, h * .66, 8, state.locked ? red : amber);
+}
 
-        hudCtx.shadowBlur = 0;
+function drawRadar(w, h) {
+  const cx = w / 2, cy = h * .88, r = 74;
+  ctx.strokeStyle = 'rgba(80,220,255,.55)';
+  ctx.lineWidth = 1;
+  for (const rr of [r, r * .67, r * .34]) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  line([[cx - r, cy], [cx + r, cy]], cyan, 1, .28);
+  line([[cx, cy - r], [cx, cy + r]], cyan, 1, .28);
 
-        // Center Reticle
-        hudCtx.strokeStyle = '#00ffff';
-        hudCtx.lineWidth = 1.5;
-        hudCtx.beginPath(); hudCtx.arc(cx, cy, 2, 0, Math.PI * 2); hudCtx.fillStyle = '#00ffff'; hudCtx.fill();
-        hudCtx.beginPath(); hudCtx.moveTo(cx - 60, cy); hudCtx.lineTo(cx - 20, cy); hudCtx.moveTo(cx + 20, cy); hudCtx.lineTo(cx + 60, cy); hudCtx.moveTo(cx, cy - 60); hudCtx.lineTo(cx, cy - 20); hudCtx.moveTo(cx, cy + 20); hudCtx.lineTo(cx, cy + 60); hudCtx.stroke();
+  const a = (state.time * .9) % (Math.PI * 2);
+  ctx.strokeStyle = 'rgba(90,240,255,.85)';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+  ctx.stroke();
 
-        // Target Reticle
-        const tx = cx + Math.cos(Date.now() * 0.0015) * 15;
-        const ty = cy - 80 + Math.sin(Date.now() * 0.002) * 10;
-        hudCtx.strokeStyle = '#ff6600';
-        hudCtx.lineWidth = 2;
-        hudCtx.beginPath(); hudCtx.arc(tx, ty, 25, 0, Math.PI * 2); hudCtx.stroke();
-        hudCtx.beginPath();
-        hudCtx.moveTo(tx - 30, ty - 30); hudCtx.lineTo(tx - 20, ty - 30); hudCtx.lineTo(tx - 20, ty - 20);
-        hudCtx.moveTo(tx + 30, ty - 30); hudCtx.lineTo(tx + 20, ty - 30); hudCtx.lineTo(tx + 20, ty - 20);
-        hudCtx.moveTo(tx - 30, ty + 30); hudCtx.lineTo(tx - 20, ty + 30); hudCtx.lineTo(tx - 20, ty + 20);
-        hudCtx.moveTo(tx + 30, ty + 30); hudCtx.lineTo(tx + 20, ty + 30); hudCtx.lineTo(tx + 20, ty + 20);
-        hudCtx.stroke();
-        hudCtx.fillStyle = '#ff6600'; hudCtx.font = '12px monospace'; hudCtx.fillText('567m', tx - 15, ty - 35);
+  /* BUGFIX: this used an undeclared `shipYaw`, throwing a ReferenceError
+   * out of drawHUD every single frame. */
+  _rel.copy(targetShip.position).sub(shipGroup.position);
+  const dist = Math.min(r * .88, Math.hypot(_rel.x, _rel.z) * .045);
+  const ang = Math.atan2(_rel.z, _rel.x) - state.yaw;
+  const bx = cx + Math.cos(ang) * dist;
+  const by = cy + Math.sin(ang) * dist;
+  ctx.fillStyle = red;
+  ctx.beginPath();
+  ctx.arc(bx, by, 3.5, 0, Math.PI * 2);
+  ctx.fill();
 
-        // Left Panel
-        hudCtx.fillStyle = '#00ffff'; hudCtx.font = '11px monospace';
-        hudCtx.strokeStyle = 'rgba(0, 255, 255, 0.6)'; hudCtx.lineWidth = 1;
-        const sx = w * 0.06, sy = h * 0.15;
-        hudCtx.beginPath();
-        hudCtx.moveTo(sx, sy - 40); hudCtx.lineTo(sx + 15, sy - 10); hudCtx.lineTo(sx + 15, sy + 30); hudCtx.lineTo(sx, sy + 50); hudCtx.lineTo(sx - 15, sy + 30); hudCtx.lineTo(sx - 15, sy - 10); hudCtx.closePath();
-        hudCtx.moveTo(sx, sy - 20); hudCtx.lineTo(sx - 40, sy + 10); hudCtx.lineTo(sx - 30, sy + 20); hudCtx.lineTo(sx - 10, sy + 15);
-        hudCtx.moveTo(sx, sy - 20); hudCtx.lineTo(sx + 40, sy + 10); hudCtx.lineTo(sx + 30, sy + 20); hudCtx.lineTo(sx + 10, sy + 15);
-        hudCtx.stroke();
+  txt('RADAR', cx, cy + r + 17, 7, '#668893', 'center');
+}
 
-        hudCtx.fillStyle = '#00ffff';
-        hudCtx.fillText('LAT 0.06', w * 0.06, h * 0.32);
-        hudCtx.fillText('LNG 7.56', w * 0.06, h * 0.34);
-        hudCtx.fillText('VRT 2.50', w * 0.06, h * 0.36);
+function drawBottom(w, h) {
+  txt('SPD  ' + Math.round(state.speed) + ' m/s', w * .20, h * .955, 9, cyan);
+  txt('THR  ' + Math.round(state.throttle) + '%', w * .20, h * .975, 8, '#76949e');
+  txt('FUEL', w * .72, h * .955, 8, '#76949e');
+  bar(w * .72, h * .965, 72, 4, state.fuel / 100, state.fuel < 25 ? red : cyan);
+  txt('HEAT', w * .82, h * .955, 8, '#76949e');
+  bar(w * .82, h * .965, 72, 4, state.heat / 100, state.heat > 75 ? red : amber);
+  drawRadar(w, h);
+}
 
-        hudCtx.fillStyle = '#aaffaa'; hudCtx.fillText('CF-117 Ball Turret', w * 0.06, h * 0.42);
-        hudCtx.fillStyle = '#00ffff'; hudCtx.fillText('1600  1600', w * 0.06, h * 0.44);
-        hudCtx.fillStyle = '#aaffaa'; hudCtx.fillText('NN-14 Neutron Gun', w * 0.06, h * 0.48);
-        hudCtx.fillStyle = '#00ffff'; hudCtx.fillText('87%', w * 0.06, h * 0.50);
+function drawHUD() {
+  const w = hud.width, h = hud.height;
+  ctx.clearRect(0, 0, w, h);
 
-        hudCtx.fillText('THR ' + Math.round(gameState.throttle), w * 0.06, h * 0.55);
-        hudCtx.fillRect(w * 0.06, h * 0.56, 50, 4);
-        hudCtx.fillRect(w * 0.06, h * 0.56, 50 * (gameState.throttle / 100), 4);
+  drawCockpitFrame(w, h);
+  drawTop(w, h);
+  drawCenter(w, h);
+  drawLeft(w, h);
+  drawRight(w, h);
+  drawBottom(w, h);
 
-        // Right Panel
-        hudCtx.fillStyle = '#00ffff'; hudCtx.font = '12px monospace';
-        hudCtx.fillText('VANDUUL SCYTHE', w * 0.82, h * 0.25);
-        hudCtx.fillStyle = '#aaaaaa'; hudCtx.font = '10px monospace'; hudCtx.fillText('DREAD PIRATE ROBERTS', w * 0.82, h * 0.27);
-        hudCtx.fillStyle = '#ff6600'; hudCtx.fillText('1024 m', w * 0.82, h * 0.29);
-        
-        hudCtx.fillStyle = '#00ffff'; hudCtx.font = '12px monospace'; hudCtx.fillText('VANDUUL SCYTHE', w * 0.82, h * 0.38);
-        hudCtx.fillStyle = '#aaaaaa'; hudCtx.font = '10px monospace'; hudCtx.fillText('Pere_Messer_101', w * 0.82, h * 0.40);
-        hudCtx.fillStyle = '#ff6600'; hudCtx.fillText('1024 m', w * 0.82, h * 0.42);
+  ctx.fillStyle = getScanPattern();
+  ctx.fillRect(0, 0, w, h);
 
-        // Radar
-        hudCtx.strokeStyle = '#00ffff'; hudCtx.lineWidth = 1.5;
-        hudCtx.beginPath(); hudCtx.arc(cx, h * 0.88, 70, 0, Math.PI * 2); hudCtx.stroke();
-        hudCtx.beginPath(); hudCtx.arc(cx, h * 0.88, 50, 0, Math.PI * 2); hudCtx.stroke();
-        hudCtx.beginPath(); hudCtx.arc(cx, h * 0.88, 30, 0, Math.PI * 2); hudCtx.stroke();
+  if (state.damage > 0) {
+    ctx.fillStyle = `rgba(255,40,50,${state.damage * .16})`;
+    ctx.fillRect(0, 0, w, h);
+  }
+}
 
-        const sweepAngle = (Date.now() % 3000) / 3000 * Math.PI * 2;
-        hudCtx.beginPath(); hudCtx.moveTo(cx, h * 0.88); hudCtx.lineTo(cx + Math.cos(sweepAngle) * 70, h * 0.88 + Math.sin(sweepAngle) * 70); hudCtx.stroke();
+/* ------------------------------------------------------------------ *
+ * SIMULATION
+ * ------------------------------------------------------------------ */
+function update(dt) {
+  readKeyboard(dt);
+  state.time += dt;
 
-        hudCtx.fillStyle = '#ff6600';
-        hudCtx.beginPath(); hudCtx.arc(cx + 30, h * 0.88 - 20, 3, 0, Math.PI*2); hudCtx.fill();
-        hudCtx.beginPath(); hudCtx.arc(cx - 40, h * 0.88 + 10, 2, 0, Math.PI*2); hudCtx.fill();
+  const turn = .95;
+  state.targetYaw   -= state.steering.x * turn * dt;
+  state.targetPitch -= state.steering.y * turn * .72 * dt;
+  state.targetPitch  = THREE.MathUtils.clamp(state.targetPitch, -1.05, 1.05);
+  state.targetRoll   = -state.steering.x * .72;
+  state.yaw   += (state.targetYaw   - state.yaw)   * Math.min(1, 4.2 * dt);
+  state.pitch += (state.targetPitch - state.pitch) * Math.min(1, 4.2 * dt);
+  state.roll  += (state.targetRoll  - state.roll)  * Math.min(1, 5.5 * dt);
+  shipGroup.rotation.set(state.pitch, state.yaw, state.roll, 'YXZ');
 
-        hudCtx.beginPath(); hudCtx.moveTo(cx - 80, h * 0.88); hudCtx.lineTo(cx + 80, h * 0.88); hudCtx.moveTo(cx, h * 0.88 - 80); hudCtx.lineTo(cx, h * 0.88 + 80); hudCtx.stroke();
+  const desired = state.boost ? 100 : 62;
+  state.throttle += ((desired - state.throttle) - state.steering.y * 12) * dt * 1.7;
+  if (keys.ShiftLeft || keys.ShiftRight) state.throttle -= 45 * dt;
+  state.throttle = THREE.MathUtils.clamp(state.throttle, 8, 100);
 
-        // Bottom Left Stats
-        hudCtx.fillStyle = '#00ffff'; hudCtx.font = '11px monospace';
-        hudCtx.fillText('SPD ' + Math.round(gameState.speed) + ' m/s', w * 0.2, h * 0.95);
-        hudCtx.fillText('THR ' + Math.round(gameState.throttle) + '%', w * 0.2, h * 0.97);
-        hudCtx.fillRect(w * 0.3, h * 0.96, 40, 4); hudCtx.fillRect(w * 0.35, h * 0.96, 30, 4); hudCtx.fillRect(w * 0.4, h * 0.96, 20, 4);
+  const cruise = 60 + (state.throttle / 100) * 210;
+  const boost  = state.boost && state.fuel > 1 ? 115 : 0;
+  state.speed += (cruise + boost - state.speed) * Math.min(1, 2.3 * dt);
 
-        // Top Status Bar
-        hudCtx.font = '10px monospace';
-        hudCtx.fillText('OXYGEN', w * 0.3, h * 0.04); hudCtx.fillText('INTEGRITY', w * 0.45, h * 0.04); hudCtx.fillText('POWER', w * 0.6, h * 0.04);
-        hudCtx.fillStyle = '#aaffaa'; hudCtx.fillRect(w * 0.3, h * 0.05, 60, 4);
-        hudCtx.fillStyle = '#00ffff'; hudCtx.fillRect(w * 0.45, h * 0.05, 60, 4);
-        hudCtx.fillStyle = '#ffcc00'; hudCtx.fillRect(w * 0.6, h * 0.05, 60, 4);
-    }
+  if (state.boost) { state.fuel -= 7 * dt; state.heat += 18 * dt; }
+  else             { state.fuel -= .22 * dt; state.heat -= 9 * dt; }
+  state.fuel = THREE.MathUtils.clamp(state.fuel, 0, 100);
+  state.heat = THREE.MathUtils.clamp(state.heat, 0, 100);
 
-    // --- 7. GAME LOOP ---
-    function animate() {
-        requestAnimationFrame(animate);
+  if (state.heat > 94) { state.speed *= .992; state.power -= 3 * dt; }
+  else state.power += 2 * dt;
+  state.power = THREE.MathUtils.clamp(state.power, 0, 100);
 
-        const delta = Math.min(clock.getDelta(), 0.1);
+  _forward.set(0, 0, -1).applyQuaternion(shipGroup.quaternion);
+  shipGroup.position.addScaledVector(_forward, state.speed * dt);
 
-        // Smooth rotation interpolation
-        yaw += (targetYaw - yaw) * 2.0 * delta;
-        pitch += (targetPitch - pitch) * 2.0 * delta;
-        
-        targetRoll = -targetYaw * 0.8;
-        roll += (targetRoll - roll) * 1.5 * delta;
+  /* Target drift */
+  targetShip.position.x = 480 + Math.sin(state.time * .13) * 190;
+  targetShip.position.y = 330 + Math.sin(state.time * .22) * 75;
+  targetShip.position.z = -850 + Math.cos(state.time * .11) * 220;
+  targetShip.rotation.y += dt * .55;
 
-        shipGroup.rotation.set(pitch, yaw, roll, 'YXZ');
+  state.targetDistance = shipGroup.position.distanceTo(targetShip.position);
+  state.targetClosing = state.speed * .18;
+  if (state.locked && state.targetDistance < 380) state.targetHealth = Math.max(0, state.targetHealth - 2.5 * dt);
+  if (state.targetHealth <= 0) {
+    state.locked = false;
+    state.targetHealth = 100;
+    targetShip.position.z -= 900;
+  }
 
-        gameState.speed = 50 + (gameState.throttle / 100) * 200;
-        
-        // Move ship forward
-        const forward = new THREE.Vector3(0, 0, -1);
-        forward.applyQuaternion(shipGroup.quaternion);
-        shipGroup.position.addScaledVector(forward, gameState.speed * delta);
+  /* Chase camera */
+  _offset.set(0, 4.8, 15);
+  _euler.set(cameraOrbit.y, cameraOrbit.x, 0, 'YXZ');
+  _offset.applyEuler(_euler);
+  _offset.applyQuaternion(shipGroup.quaternion);
+  _camTarget.copy(shipGroup.position).add(_offset);
+  camera.position.lerp(_camTarget, 1 - Math.pow(.001, dt));
+  _lookAt.copy(shipGroup.position).addScaledVector(_forward, 95);
+  camera.lookAt(_lookAt);
 
-        // --- FIX: THIRD PERSON CAMERA LOGIC ---
-        // 1. Define a camera offset (Behind and above the ship)
-        const cameraOffset = new THREE.Vector3(0, 12, 35); 
-        
-        // 2. Rotate the offset by the ship's current rotation
-        cameraOffset.applyQuaternion(shipGroup.quaternion);
-        
-        // 3. Calculate the target camera position
-        const targetCameraPos = shipGroup.position.clone().add(cameraOffset);
-        
-        // 4. Smoothly move camera to the target position (lerp for a fluid feel)
-        camera.position.lerp(targetCameraPos, 0.15);
-        
-        // 5. Make the camera look at the ship
-        camera.lookAt(shipGroup.position);
+  stars.rotation.y += dt * .0015;
 
-        // Update Infinite Terrain
-        updateTerrain();
+  updateTerrain();
 
-        // Render 3D Scene
-        renderer.render(scene, camera);
+  if (Math.random() < dt * .012 && state.health > 8) {
+    state.health -= 1.1;
+    state.damage = .75;
+    state.lastHit = state.time;
+  }
+  state.damage = Math.max(0, state.damage - dt * 2.8);
+}
 
-        // Render 2D HUD
-        drawHUD();
-    }
+/* Only touch the DOM when the value actually changes. */
+let lastFlash = -1;
+function syncDamageFlash() {
+  const op = Math.min(.5, state.damage);
+  if (Math.abs(op - lastFlash) > 0.01) {
+    damageFlash.style.opacity = String(op);
+    lastFlash = op;
+  }
+}
 
-    // --- 8. WINDOW RESIZE ---
-    function onWindowResize() {
-        camera.aspect = window.innerWidth / window.innerHeight;
-        camera.updateProjectionMatrix();
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        resizeHUD();
-    }
+/* ------------------------------------------------------------------ *
+ * LOOP
+ * ------------------------------------------------------------------ */
+function animate() {
+  requestAnimationFrame(animate);
 
-    // Start the game
-    init();
+  const dt = Math.min(clock.getDelta(), .05);
 
+  update(dt);
+  syncDamageFlash();
+
+  composer.render();
+  drawHUD();
+
+  adaptQuality(dt);
+}
+
+init();
   </script>
 </body>
 
