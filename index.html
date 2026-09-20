@@ -1,56 +1,62 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Spaceship Flight Sim</title>
-    <style>
-        body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            background-color: #000;
-            touch-action: none; /* Prevents iPad scrolling/zooming */
-            user-select: none;
-        }
-        #game-container {
-            position: relative;
-            width: 100%;
-            height: 100%;
-        }
-        #webgl-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 1;
-        }
-        #hud-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 2;
-            pointer-events: none; /* Let clicks pass through to the game */
-        }
-        #loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: #00ffff;
-            font-family: monospace;
-            font-size: 24px;
-            z-index: 3;
-        }
-    </style>
-    <!-- Import Three.js and GLTFLoader -->
-    <script type="importmap">
-        {
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Spaceship Flight Sim</title>
+  <style>
+    body,
+    html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #000;
+      touch-action: none;
+      user-select: none;
+    }
+
+    #game-container {
+      position: relative;
+      width: 100%;
+      height: 100%;
+    }
+
+    #webgl-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+    }
+
+    #hud-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #00ffff;
+      font-family: monospace;
+      font-size: 24px;
+      z-index: 3;
+      text-shadow: 0 0 10px #00ffff;
+    }
+  </style>
+  <script type="importmap">
+    {
             "imports": {
                 "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
                 "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
@@ -58,15 +64,16 @@
         }
     </script>
 </head>
+
 <body>
 
-<div id="game-container">
+  <div id="game-container">
     <div id="loading">INITIALIZING SYSTEMS...</div>
     <canvas id="webgl-canvas"></canvas>
     <canvas id="hud-canvas"></canvas>
-</div>
+  </div>
 
-<script type="module">
+  <script type="module">
     import * as THREE from 'three';
     import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
@@ -78,166 +85,122 @@
 
     let scene, camera, renderer, clock;
     let shipGroup;
-    let shipSpeed = 0;
-    const maxSpeed = 500;
     
-    // Flight physics variables
-    let pitch = 0;
-    let yaw = 0;
-    let roll = 0;
-    const pitchSpeed = 1.5;
-    const yawSpeed = 1.5;
-    const rollSpeed = 2.0;
+    // Flight Dynamics
+    let pitch = 0, yaw = 0, roll = 0;
+    let targetPitch = 0, targetYaw = 0, targetRoll = 0;
+    
+    // Game State for HUD
+    let gameState = {
+        speed: 100,
+        throttle: 75,
+        health: 87,
+        ammo: 1600
+    };
 
-    // Input state
-    const input = { x: 0, y: 0, isTouching: false, touchStartX: 0, touchStartY: 0 };
+    // Input
+    const input = { x: 0, y: 0, isTouching: false, startX: 0, startY: 0 };
 
-    // Terrain variables
-    const CHUNK_SIZE = 2000;
-    const VIEW_DISTANCE = 3; // How many chunks to render in each direction
+    // Terrain
+    const CHUNK_SIZE = 1500;
+    const VIEW_DISTANCE = 3;
     const chunks = new Map();
     let terrainMaterial;
 
-    // --- 2. TERRAIN NOISE (Simple Perlin-like for infinite terrain) ---
-    // A simplified pseudo-random noise function for terrain height
-    function noise(x, z) {
-        const p = Math.sin(x * 0.01) * Math.cos(z * 0.01);
-        const p2 = Math.sin(x * 0.05 + 1.3) * Math.cos(z * 0.05 + 2.1) * 0.5;
-        const p3 = Math.sin(x * 0.002) * Math.cos(z * 0.002) * 5;
-        return (p + p2 + p3) * 20; // Scale height
-    }
-
-    // --- 3. INITIALIZATION ---
+    // --- 2. INITIALIZATION ---
     function init() {
-        // Setup Three.js
         scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x050a15, 0.0003); // Space-like fog
+        scene.fog = new THREE.FogExp2(0x050a15, 0.0004);
 
-        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 10000);
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 15000);
         
-        renderer = new THREE.WebGLRenderer({ canvas: webglCanvas, antialias: true });
+        renderer = new THREE.WebGLRenderer({ canvas: webglCanvas, antialias: true, powerPreference: "high-performance" });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Optimize for iPad retina
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
         clock = new THREE.Clock();
 
-        // Lighting
-        const ambientLight = new THREE.AmbientLight(0x334455, 1.5);
+        // Lighting for the terrain
+        const ambientLight = new THREE.AmbientLight(0x334455, 2.0);
         scene.add(ambientLight);
-
-        const dirLight = new THREE.DirectionalLight(0xffffff, 2);
+        const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
         dirLight.position.set(1000, 2000, 500);
         scene.add(dirLight);
 
-        // Setup Ship Group
         shipGroup = new THREE.Group();
+        shipGroup.position.set(0, 300, 0);
         scene.add(shipGroup);
-        
-        // Position ship slightly above origin
-        shipGroup.position.set(0, 200, 0);
 
-        // Setup Terrain Material (Low poly, flat shading)
+        // Terrain Material
         terrainMaterial = new THREE.MeshStandardMaterial({
-            color: 0x223344,
+            color: 0x112233,
+            emissive: 0x001122,
             wireframe: false,
             flatShading: true,
-            roughness: 0.8,
-            metalness: 0.2
+            roughness: 0.9,
+            metalness: 0.1
         });
 
-        // Load Ship Model
         loadShipModel();
-
-        // Setup HUD
         resizeHUD();
         
-        // Event Listeners
         window.addEventListener('resize', onWindowResize);
         setupControls();
 
-        // Remove loading screen
         loadingEl.style.display = 'none';
-
-        // Start Game Loop
         animate();
     }
 
-    // --- 4. SHIP MODEL LOADING ---
+    // --- 3. SHIP MODEL LOADING ---
     function loadShipModel() {
         const loader = new GLTFLoader();
-        
-        // NOTE: Browsers cannot load .blend files. You must export to .glb from Blender.
-        // Make sure spaceship.glb is in the assets folder.
         loader.load('assets/spaceship.glb', (gltf) => {
             const model = gltf.scene;
-            
-            // Adjust scale if necessary based on your Blender export
             model.scale.set(1, 1, 1); 
             
-            // Add to ship group
+            // FIX: Rotate model 180 degrees so it faces the correct direction
+            model.rotation.y = Math.PI; 
+            
             shipGroup.add(model);
-            
-            // Since it's a cockpit view, we might want to position the camera inside
-            // For now, we'll assume the model is centered and the camera is at the origin of the group
-            // If the model blocks the view, you may need to adjust its position here:
-            // model.position.z = -5; 
-            
-            // Apply texture if it didn't load from glb
-            const textureLoader = new THREE.TextureLoader();
-            textureLoader.load('assets/spaceshiptexture.png', (texture) => {
-                model.traverse((child) => {
-                    if (child.isMesh) {
-                        child.material.map = texture;
-                        child.material.needsUpdate = true;
-                    }
-                });
-            });
-
         }, undefined, (error) => {
-            console.warn("Could not load spaceship.glb. Make sure you exported your .blend to .glb and placed it in the assets folder. Using fallback ship.");
-            createFallbackShip();
+            console.warn("Could not load spaceship.glb. Using fallback.");
+            const geometry = new THREE.ConeGeometry(2, 10, 8);
+            geometry.rotateX(Math.PI / 2);
+            const material = new THREE.MeshStandardMaterial({ color: 0x00aaff, wireframe: true });
+            const fallback = new THREE.Mesh(geometry, material);
+            
+            // FIX: Rotate fallback 180 degrees
+            fallback.rotation.y = Math.PI;
+            
+            shipGroup.add(fallback);
         });
     }
 
-    function createFallbackShip() {
-        // Create a simple placeholder if the model is missing
-        const geometry = new THREE.ConeGeometry(2, 10, 8);
-        geometry.rotateX(Math.PI / 2);
-        const material = new THREE.MeshStandardMaterial({ color: 0x00aaff, wireframe: true });
-        const fallback = new THREE.Mesh(geometry, material);
-        fallback.position.z = -5; // Push forward so we see it in front of camera
-        shipGroup.add(fallback);
+    // --- 4. INFINITE TERRAIN GENERATION ---
+    function noise(x, z) {
+        const p1 = Math.sin(x * 0.005) * Math.cos(z * 0.005) * 100;
+        const p2 = Math.sin(x * 0.02 + 1.3) * Math.cos(z * 0.02 + 2.1) * 30;
+        const p3 = Math.sin(x * 0.1) * Math.cos(z * 0.1) * 5;
+        return p1 + p2 + p3;
     }
 
-    // --- 5. INFINITE TERRAIN GENERATION ---
     function generateChunk(cx, cz) {
         const key = `${cx},${cz}`;
         if (chunks.has(key)) return;
 
-        const geometry = new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE, 20, 20);
+        const geometry = new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE, 24, 24);
         geometry.rotateX(-Math.PI / 2);
 
         const vertices = geometry.attributes.position.array;
-        
-        // Displace vertices based on noise
         for (let i = 0; i < vertices.length; i += 3) {
             const x = vertices[i] + (cx * CHUNK_SIZE);
             const z = vertices[i + 2] + (cz * CHUNK_SIZE);
-            
-            // Base terrain height
-            let y = noise(x, z);
-            
-            // Add some craters or mountains
-            y += Math.abs(noise(x * 0.5, z * 0.5)) * 50;
-            
-            vertices[i + 1] = y;
+            vertices[i + 1] = noise(x, z);
         }
 
         geometry.computeVertexNormals();
-
         const mesh = new THREE.Mesh(geometry, terrainMaterial);
         mesh.position.set(cx * CHUNK_SIZE, 0, cz * CHUNK_SIZE);
-        
         scene.add(mesh);
         chunks.set(key, mesh);
     }
@@ -246,73 +209,52 @@
         const playerChunkX = Math.floor(shipGroup.position.x / CHUNK_SIZE);
         const playerChunkZ = Math.floor(shipGroup.position.z / CHUNK_SIZE);
 
-        // Generate new chunks around player
         for (let x = -VIEW_DISTANCE; x <= VIEW_DISTANCE; x++) {
             for (let z = -VIEW_DISTANCE; z <= VIEW_DISTANCE; z++) {
                 generateChunk(playerChunkX + x, playerChunkZ + z);
             }
         }
 
-        // Remove distant chunks to save memory
-        const toRemove = [];
         chunks.forEach((mesh, key) => {
             const [cx, cz] = key.split(',').map(Number);
-            if (Math.abs(cx - playerChunkX) > VIEW_DISTANCE + 1 || 
-                Math.abs(cz - playerChunkZ) > VIEW_DISTANCE + 1) {
-                toRemove.push(key);
+            if (Math.abs(cx - playerChunkX) > VIEW_DISTANCE + 1 || Math.abs(cz - playerChunkZ) > VIEW_DISTANCE + 1) {
+                scene.remove(mesh);
+                mesh.geometry.dispose();
+                chunks.delete(key);
             }
-        });
-
-        toRemove.forEach(key => {
-            const mesh = chunks.get(key);
-            scene.remove(mesh);
-            mesh.geometry.dispose();
-            chunks.delete(key);
         });
     }
 
-    // --- 6. CONTROLS (IPAD OPTIMIZED) ---
+    // --- 5. CONTROLS ---
     function setupControls() {
         const container = document.getElementById('game-container');
 
         container.addEventListener('pointerdown', (e) => {
             input.isTouching = true;
-            input.touchStartX = e.clientX;
-            input.touchStartY = e.clientY;
+            input.startX = e.clientX;
+            input.startY = e.clientY;
         });
 
         container.addEventListener('pointermove', (e) => {
             if (!input.isTouching) return;
+            const deltaX = e.clientX - input.startX;
+            const deltaY = e.clientY - input.startY;
             
-            const deltaX = e.clientX - input.touchStartX;
-            const deltaY = e.clientY - input.touchStartY;
+            targetYaw = -(deltaX / (window.innerWidth * 0.4));
+            targetPitch = -(deltaY / (window.innerHeight * 0.4));
             
-            // Normalize input
-            input.x = deltaX / (window.innerWidth * 0.3);
-            input.y = deltaY / (window.innerHeight * 0.3);
-            
-            // Clamp
-            input.x = Math.max(-1, Math.min(1, input.x));
-            input.y = Math.max(-1, Math.min(1, input.y));
+            gameState.throttle = 75 + (targetPitch * 20);
         });
 
         container.addEventListener('pointerup', () => {
             input.isTouching = false;
-            input.x = 0;
-            input.y = 0;
+            targetYaw = 0;
+            targetPitch = 0;
+            gameState.throttle = 75;
         });
-        
-        container.addEventListener('pointercancel', () => {
-            input.isTouching = false;
-            input.x = 0;
-            input.y = 0;
-        });
-        
-        // Auto-throttle forward for simplicity (can be changed later)
-        shipSpeed = 100; 
     }
 
-    // --- 7. HUD RENDERING (Canvas 2D overlay matching the reference) ---
+    // --- 6. HUD RENDERING ---
     function resizeHUD() {
         hudCanvas.width = window.innerWidth;
         hudCanvas.height = window.innerHeight;
@@ -321,203 +263,145 @@
     function drawHUD() {
         const w = hudCanvas.width;
         const h = hudCanvas.height;
+        const cx = w / 2;
+        const cy = h / 2;
         
         hudCtx.clearRect(0, 0, w, h);
 
-        // --- 1. Cockpit Frame (Dark angular overlays on edges) ---
-        hudCtx.fillStyle = 'rgba(5, 10, 15, 0.95)';
+        // Cockpit Frame
+        hudCtx.fillStyle = 'rgba(5, 8, 12, 0.95)';
         hudCtx.strokeStyle = '#00ffff';
         hudCtx.lineWidth = 2;
+        hudCtx.shadowColor = '#00ffff';
+        hudCtx.shadowBlur = 10;
 
-        // Top frame
-        hudCtx.beginPath();
-        hudCtx.moveTo(0, 0);
-        hudCtx.lineTo(w, 0);
-        hudCtx.lineTo(w, h * 0.1);
-        hudCtx.lineTo(w * 0.8, h * 0.05);
-        hudCtx.lineTo(w * 0.2, h * 0.05);
-        hudCtx.lineTo(0, h * 0.1);
-        hudCtx.closePath();
-        hudCtx.fill();
-        hudCtx.stroke();
+        hudCtx.beginPath(); hudCtx.moveTo(0, 0); hudCtx.lineTo(w, 0); hudCtx.lineTo(w * 0.85, h * 0.08); hudCtx.lineTo(w * 0.15, h * 0.08); hudCtx.closePath(); hudCtx.fill(); hudCtx.stroke();
+        hudCtx.beginPath(); hudCtx.moveTo(0, 0); hudCtx.lineTo(w * 0.15, h * 0.08); hudCtx.lineTo(w * 0.1, h * 0.8); hudCtx.lineTo(0, h); hudCtx.closePath(); hudCtx.fill(); hudCtx.stroke();
+        hudCtx.beginPath(); hudCtx.moveTo(w, 0); hudCtx.lineTo(w * 0.85, h * 0.08); hudCtx.lineTo(w * 0.9, h * 0.8); hudCtx.lineTo(w, h); hudCtx.closePath(); hudCtx.fill(); hudCtx.stroke();
+        hudCtx.beginPath(); hudCtx.moveTo(0, h); hudCtx.lineTo(w, h); hudCtx.lineTo(w * 0.9, h * 0.85); hudCtx.lineTo(w * 0.1, h * 0.85); hudCtx.closePath(); hudCtx.fill(); hudCtx.stroke();
 
-        // Left frame
-        hudCtx.beginPath();
-        hudCtx.moveTo(0, 0);
-        hudCtx.lineTo(w * 0.15, h * 0.15);
-        hudCtx.lineTo(w * 0.1, h * 0.8);
-        hudCtx.lineTo(0, h);
-        hudCtx.closePath();
-        hudCtx.fill();
-        hudCtx.stroke();
+        hudCtx.shadowBlur = 0;
 
-        // Right frame
-        hudCtx.beginPath();
-        hudCtx.moveTo(w, 0);
-        hudCtx.lineTo(w * 0.85, h * 0.15);
-        hudCtx.lineTo(w * 0.9, h * 0.8);
-        hudCtx.lineTo(w, h);
-        hudCtx.closePath();
-        hudCtx.fill();
-        hudCtx.stroke();
-
-        // Bottom frame
-        hudCtx.beginPath();
-        hudCtx.moveTo(0, h);
-        hudCtx.lineTo(w, h);
-        hudCtx.lineTo(w * 0.9, h * 0.85);
-        hudCtx.lineTo(w * 0.1, h * 0.85);
-        hudCtx.closePath();
-        hudCtx.fill();
-        hudCtx.stroke();
-
-        // --- 2. Center Crosshair & Target ---
-        const cx = w / 2;
-        const cy = h / 2;
-
+        // Center Reticle
         hudCtx.strokeStyle = '#00ffff';
         hudCtx.lineWidth = 1.5;
-        
-        // Center dot
-        hudCtx.beginPath();
-        hudCtx.arc(cx, cy, 3, 0, Math.PI * 2);
-        hudCtx.fillStyle = '#00ffff';
-        hudCtx.fill();
+        hudCtx.beginPath(); hudCtx.arc(cx, cy, 2, 0, Math.PI * 2); hudCtx.fillStyle = '#00ffff'; hudCtx.fill();
+        hudCtx.beginPath(); hudCtx.moveTo(cx - 60, cy); hudCtx.lineTo(cx - 20, cy); hudCtx.moveTo(cx + 20, cy); hudCtx.lineTo(cx + 60, cy); hudCtx.moveTo(cx, cy - 60); hudCtx.lineTo(cx, cy - 20); hudCtx.moveTo(cx, cy + 20); hudCtx.lineTo(cx, cy + 60); hudCtx.stroke();
 
-        // Crosshair brackets
-        hudCtx.beginPath();
-        hudCtx.moveTo(cx - 40, cy); hudCtx.lineTo(cx - 15, cy);
-        hudCtx.moveTo(cx + 15, cy); hudCtx.lineTo(cx + 40, cy);
-        hudCtx.moveTo(cx, cy - 40); hudCtx.lineTo(cx, cy - 15);
-        hudCtx.moveTo(cx, cy + 15); hudCtx.lineTo(cx, cy + 40);
-        hudCtx.stroke();
-
-        // Orange Target Reticle (Simulated)
+        // Target Reticle
+        const tx = cx + Math.cos(Date.now() * 0.0015) * 15;
+        const ty = cy - 80 + Math.sin(Date.now() * 0.002) * 10;
         hudCtx.strokeStyle = '#ff6600';
         hudCtx.lineWidth = 2;
+        hudCtx.beginPath(); hudCtx.arc(tx, ty, 25, 0, Math.PI * 2); hudCtx.stroke();
         hudCtx.beginPath();
-        hudCtx.arc(cx, cy - 50, 30, 0, Math.PI * 2); // Circle
+        hudCtx.moveTo(tx - 30, ty - 30); hudCtx.lineTo(tx - 20, ty - 30); hudCtx.lineTo(tx - 20, ty - 20);
+        hudCtx.moveTo(tx + 30, ty - 30); hudCtx.lineTo(tx + 20, ty - 30); hudCtx.lineTo(tx + 20, ty - 20);
+        hudCtx.moveTo(tx - 30, ty + 30); hudCtx.lineTo(tx - 20, ty + 30); hudCtx.lineTo(tx - 20, ty + 20);
+        hudCtx.moveTo(tx + 30, ty + 30); hudCtx.lineTo(tx + 20, ty + 30); hudCtx.lineTo(tx + 20, ty + 20);
         hudCtx.stroke();
-        
-        // Target corners
+        hudCtx.fillStyle = '#ff6600'; hudCtx.font = '12px monospace'; hudCtx.fillText('567m', tx - 15, ty - 35);
+
+        // Left Panel
+        hudCtx.fillStyle = '#00ffff'; hudCtx.font = '11px monospace';
+        hudCtx.strokeStyle = 'rgba(0, 255, 255, 0.6)'; hudCtx.lineWidth = 1;
+        const sx = w * 0.06, sy = h * 0.15;
         hudCtx.beginPath();
-        hudCtx.moveTo(cx - 35, cy - 85); hudCtx.lineTo(cx - 25, cy - 85); hudCtx.lineTo(cx - 25, cy - 75);
-        hudCtx.moveTo(cx + 35, cy - 85); hudCtx.lineTo(cx + 25, cy - 85); hudCtx.lineTo(cx + 25, cy - 75);
-        hudCtx.moveTo(cx - 35, cy - 15); hudCtx.lineTo(cx - 25, cy - 15); hudCtx.lineTo(cx - 25, cy - 25);
-        hudCtx.moveTo(cx + 35, cy - 15); hudCtx.lineTo(cx + 25, cy - 15); hudCtx.lineTo(cx + 25, cy - 25);
+        hudCtx.moveTo(sx, sy - 40); hudCtx.lineTo(sx + 15, sy - 10); hudCtx.lineTo(sx + 15, sy + 30); hudCtx.lineTo(sx, sy + 50); hudCtx.lineTo(sx - 15, sy + 30); hudCtx.lineTo(sx - 15, sy - 10); hudCtx.closePath();
+        hudCtx.moveTo(sx, sy - 20); hudCtx.lineTo(sx - 40, sy + 10); hudCtx.lineTo(sx - 30, sy + 20); hudCtx.lineTo(sx - 10, sy + 15);
+        hudCtx.moveTo(sx, sy - 20); hudCtx.lineTo(sx + 40, sy + 10); hudCtx.lineTo(sx + 30, sy + 20); hudCtx.lineTo(sx + 10, sy + 15);
         hudCtx.stroke();
 
-        // Target distance text
+        hudCtx.fillStyle = '#00ffff';
+        hudCtx.fillText('LAT 0.06', w * 0.06, h * 0.32);
+        hudCtx.fillText('LNG 7.56', w * 0.06, h * 0.34);
+        hudCtx.fillText('VRT 2.50', w * 0.06, h * 0.36);
+
+        hudCtx.fillStyle = '#aaffaa'; hudCtx.fillText('CF-117 Ball Turret', w * 0.06, h * 0.42);
+        hudCtx.fillStyle = '#00ffff'; hudCtx.fillText('1600  1600', w * 0.06, h * 0.44);
+        hudCtx.fillStyle = '#aaffaa'; hudCtx.fillText('NN-14 Neutron Gun', w * 0.06, h * 0.48);
+        hudCtx.fillStyle = '#00ffff'; hudCtx.fillText('87%', w * 0.06, h * 0.50);
+
+        hudCtx.fillText('THR ' + Math.round(gameState.throttle), w * 0.06, h * 0.55);
+        hudCtx.fillRect(w * 0.06, h * 0.56, 50, 4);
+        hudCtx.fillRect(w * 0.06, h * 0.56, 50 * (gameState.throttle / 100), 4);
+
+        // Right Panel
+        hudCtx.fillStyle = '#00ffff'; hudCtx.font = '12px monospace';
+        hudCtx.fillText('VANDUUL SCYTHE', w * 0.82, h * 0.25);
+        hudCtx.fillStyle = '#aaaaaa'; hudCtx.font = '10px monospace'; hudCtx.fillText('DREAD PIRATE ROBERTS', w * 0.82, h * 0.27);
+        hudCtx.fillStyle = '#ff6600'; hudCtx.fillText('1024 m', w * 0.82, h * 0.29);
+        
+        hudCtx.fillStyle = '#00ffff'; hudCtx.font = '12px monospace'; hudCtx.fillText('VANDUUL SCYTHE', w * 0.82, h * 0.38);
+        hudCtx.fillStyle = '#aaaaaa'; hudCtx.font = '10px monospace'; hudCtx.fillText('Pere_Messer_101', w * 0.82, h * 0.40);
+        hudCtx.fillStyle = '#ff6600'; hudCtx.fillText('1024 m', w * 0.82, h * 0.42);
+
+        // Radar
+        hudCtx.strokeStyle = '#00ffff'; hudCtx.lineWidth = 1.5;
+        hudCtx.beginPath(); hudCtx.arc(cx, h * 0.88, 70, 0, Math.PI * 2); hudCtx.stroke();
+        hudCtx.beginPath(); hudCtx.arc(cx, h * 0.88, 50, 0, Math.PI * 2); hudCtx.stroke();
+        hudCtx.beginPath(); hudCtx.arc(cx, h * 0.88, 30, 0, Math.PI * 2); hudCtx.stroke();
+
+        const sweepAngle = (Date.now() % 3000) / 3000 * Math.PI * 2;
+        hudCtx.beginPath(); hudCtx.moveTo(cx, h * 0.88); hudCtx.lineTo(cx + Math.cos(sweepAngle) * 70, h * 0.88 + Math.sin(sweepAngle) * 70); hudCtx.stroke();
+
         hudCtx.fillStyle = '#ff6600';
-        hudCtx.font = '14px monospace';
-        hudCtx.fillText('567m', cx - 20, cy - 85);
+        hudCtx.beginPath(); hudCtx.arc(cx + 30, h * 0.88 - 20, 3, 0, Math.PI*2); hudCtx.fill();
+        hudCtx.beginPath(); hudCtx.arc(cx - 40, h * 0.88 + 10, 2, 0, Math.PI*2); hudCtx.fill();
 
-        // --- 3. Left Panel (Ship Status) ---
-        hudCtx.fillStyle = '#00ffff';
-        hudCtx.font = '12px monospace';
-        
-        // Wireframe placeholder
-        hudCtx.strokeStyle = '#00ffff';
-        hudCtx.lineWidth = 1;
-        hudCtx.beginPath();
-        hudCtx.moveTo(w * 0.05, h * 0.15);
-        hudCtx.lineTo(w * 0.12, h * 0.12);
-        hudCtx.lineTo(w * 0.15, h * 0.2);
-        hudCtx.lineTo(w * 0.08, h * 0.25);
-        hudCtx.closePath();
-        hudCtx.stroke();
+        hudCtx.beginPath(); hudCtx.moveTo(cx - 80, h * 0.88); hudCtx.lineTo(cx + 80, h * 0.88); hudCtx.moveTo(cx, h * 0.88 - 80); hudCtx.lineTo(cx, h * 0.88 + 80); hudCtx.stroke();
 
-        // Speed text
-        hudCtx.fillText('SPD: ' + Math.floor(shipSpeed) + ' m/s', w * 0.05, h * 0.4);
-        
-        // Weapon status
-        hudCtx.fillStyle = '#aaffaa';
-        hudCtx.fillText('CF-117 Ball Turret', w * 0.05, h * 0.45);
-        hudCtx.fillText('NN-14 Neutron Gun', w * 0.05, h * 0.5);
-        hudCtx.fillStyle = '#00ffff';
-        hudCtx.fillText('87%', w * 0.05, h * 0.52);
+        // Bottom Left Stats
+        hudCtx.fillStyle = '#00ffff'; hudCtx.font = '11px monospace';
+        hudCtx.fillText('SPD ' + Math.round(gameState.speed) + ' m/s', w * 0.2, h * 0.95);
+        hudCtx.fillText('THR ' + Math.round(gameState.throttle) + '%', w * 0.2, h * 0.97);
+        hudCtx.fillRect(w * 0.3, h * 0.96, 40, 4); hudCtx.fillRect(w * 0.35, h * 0.96, 30, 4); hudCtx.fillRect(w * 0.4, h * 0.96, 20, 4);
 
-        // --- 4. Right Panel (Targets) ---
-        hudCtx.fillStyle = '#00ffff';
-        hudCtx.fillText('VANDUUL SCYTHE', w * 0.85, h * 0.3);
-        hudCtx.fillText('DREAD PIRATE ROBERTS', w * 0.85, h * 0.33);
-        
-        hudCtx.fillStyle = '#ff6600';
-        hudCtx.fillText('1024 m', w * 0.85, h * 0.36);
-        
-        hudCtx.fillStyle = '#00ffff';
-        hudCtx.fillText('VANDUUL SCYTHE', w * 0.85, h * 0.45);
-        hudCtx.fillText('Pere_Messer_101', w * 0.85, h * 0.48);
-        hudCtx.fillText('1024 m', w * 0.85, h * 0.51);
-
-        // --- 5. Bottom Center (Radar & Graphs) ---
-        // Radar Circle
-        hudCtx.strokeStyle = '#00ffff';
-        hudCtx.lineWidth = 2;
-        hudCtx.beginPath();
-        hudCtx.arc(cx, h * 0.85, 60, 0, Math.PI * 2);
-        hudCtx.stroke();
-
-        // Radar inner rings
-        hudCtx.beginPath();
-        hudCtx.arc(cx, h * 0.85, 40, 0, Math.PI * 2);
-        hudCtx.stroke();
-        hudCtx.beginPath();
-        hudCtx.arc(cx, h * 0.85, 20, 0, Math.PI * 2);
-        hudCtx.stroke();
-
-        // Radar sweep line (animated)
-        const sweepAngle = (Date.now() % 2000) / 2000 * Math.PI * 2;
-        hudCtx.beginPath();
-        hudCtx.moveTo(cx, h * 0.85);
-        hudCtx.lineTo(cx + Math.cos(sweepAngle) * 60, h * 0.85 + Math.sin(sweepAngle) * 60);
-        hudCtx.stroke();
-
-        // Radar blips
-        hudCtx.fillStyle = '#ff6600';
-        hudCtx.beginPath();
-        hudCtx.arc(cx + 20, h * 0.85 - 15, 3, 0, Math.PI * 2);
-        hudCtx.fill();
-
-        // Speed Graph (Bottom Left)
-        hudCtx.strokeStyle = '#00ffff';
-        hudCtx.beginPath();
-        hudCtx.moveTo(w * 0.2, h * 0.9);
-        hudCtx.lineTo(w * 0.3, h * 0.9);
-        hudCtx.stroke();
-        hudCtx.fillStyle = '#00ffff';
-        hudCtx.fillText('THR 90', w * 0.2, h * 0.88);
+        // Top Status Bar
+        hudCtx.font = '10px monospace';
+        hudCtx.fillText('OXYGEN', w * 0.3, h * 0.04); hudCtx.fillText('INTEGRITY', w * 0.45, h * 0.04); hudCtx.fillText('POWER', w * 0.6, h * 0.04);
+        hudCtx.fillStyle = '#aaffaa'; hudCtx.fillRect(w * 0.3, h * 0.05, 60, 4);
+        hudCtx.fillStyle = '#00ffff'; hudCtx.fillRect(w * 0.45, h * 0.05, 60, 4);
+        hudCtx.fillStyle = '#ffcc00'; hudCtx.fillRect(w * 0.6, h * 0.05, 60, 4);
     }
 
-    // --- 8. GAME LOOP ---
+    // --- 7. GAME LOOP ---
     function animate() {
         requestAnimationFrame(animate);
 
-        const delta = clock.getDelta();
+        const delta = Math.min(clock.getDelta(), 0.1);
 
-        // Apply input to rotation (Flight Physics)
-        if (input.isTouching || input.x !== 0 || input.y !== 0) {
-            // Yaw (Left/Right)
-            yaw -= input.x * yawSpeed * delta;
-            // Pitch (Up/Down)
-            pitch -= input.y * pitchSpeed * delta;
-        }
+        // Smooth rotation interpolation
+        yaw += (targetYaw - yaw) * 2.0 * delta;
+        pitch += (targetPitch - pitch) * 2.0 * delta;
+        
+        targetRoll = -targetYaw * 0.8;
+        roll += (targetRoll - roll) * 1.5 * delta;
 
-        // Auto-level roll (Banking)
-        const targetRoll = -input.x * 0.8;
-        roll += (targetRoll - roll) * 2.0 * delta;
-
-        // Apply rotations to ship group
         shipGroup.rotation.set(pitch, yaw, roll, 'YXZ');
 
-        // Move ship forward in the direction it's facing
+        gameState.speed = 50 + (gameState.throttle / 100) * 200;
+        
+        // Move ship forward
         const forward = new THREE.Vector3(0, 0, -1);
         forward.applyQuaternion(shipGroup.quaternion);
-        shipGroup.position.addScaledVector(forward, shipSpeed * delta);
+        shipGroup.position.addScaledVector(forward, gameState.speed * delta);
 
-        // Camera follows ship (first person cockpit view)
-        camera.position.copy(shipGroup.position);
-        camera.quaternion.copy(shipGroup.quaternion);
+        // --- FIX: THIRD PERSON CAMERA LOGIC ---
+        // 1. Define a camera offset (Behind and above the ship)
+        const cameraOffset = new THREE.Vector3(0, 12, 35); 
+        
+        // 2. Rotate the offset by the ship's current rotation
+        cameraOffset.applyQuaternion(shipGroup.quaternion);
+        
+        // 3. Calculate the target camera position
+        const targetCameraPos = shipGroup.position.clone().add(cameraOffset);
+        
+        // 4. Smoothly move camera to the target position (lerp for a fluid feel)
+        camera.position.lerp(targetCameraPos, 0.15);
+        
+        // 5. Make the camera look at the ship
+        camera.lookAt(shipGroup.position);
 
         // Update Infinite Terrain
         updateTerrain();
@@ -529,7 +413,7 @@
         drawHUD();
     }
 
-    // --- 9. WINDOW RESIZE ---
+    // --- 8. WINDOW RESIZE ---
     function onWindowResize() {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
@@ -540,6 +424,7 @@
     // Start the game
     init();
 
-</script>
+  </script>
 </body>
+
 </html>
